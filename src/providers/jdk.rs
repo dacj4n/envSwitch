@@ -250,17 +250,34 @@ fn fetch_azul_asset(version: &str, platform: &Platform) -> Result<JdkAsset, Stri
         .map_err(|_| format!("No JDK {} from Azul for {}", version, platform.display()))?;
 
     let target = version.split('+').next().unwrap_or(version);
+
+    // Collect all matching packages, prefer .tar.gz over .zip (preserves symlinks)
+    let mut best: Option<&AzulPackage> = None;
     for p in &pkgs {
         if p.java_version.len() < 3 { continue; }
         let pkg_ver = format!("{}.{}.{}", p.java_version[0], p.java_version[1], p.java_version[2]);
         if pkg_ver == target {
-            return Ok(JdkAsset {
-                download_url: p.download_url.clone(),
-                checksum: p.sha256_hash.clone(),
-                filename: p.name.clone(),
-                archive_format: if p.name.ends_with(".zip") { ArchiveFormat::Zip } else { ArchiveFormat::TarGz },
-            });
+            match best {
+                None => best = Some(p),
+                Some(ref current) => {
+                    // Prefer .tar.gz
+                    let current_is_tar = current.name.ends_with(".tar.gz");
+                    let this_is_tar = p.name.ends_with(".tar.gz");
+                    if this_is_tar && !current_is_tar {
+                        best = Some(p);
+                    }
+                }
+            }
         }
+    }
+
+    if let Some(p) = best {
+        return Ok(JdkAsset {
+            download_url: p.download_url.clone(),
+            checksum: p.sha256_hash.clone(),
+            filename: p.name.clone(),
+            archive_format: if p.name.ends_with(".zip") { ArchiveFormat::Zip } else { ArchiveFormat::TarGz },
+        });
     }
     Err(format!("No JDK {} from Azul for {}", version, platform.display()))
 }
