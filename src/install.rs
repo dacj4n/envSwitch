@@ -1,0 +1,166 @@
+use crate::domain::{ChecksumType, InstalledVersion};
+use crate::infra::{download, fs};
+use crate::providers;
+use chrono::Utc;
+use std::os::unix::fs::PermissionsExt;
+
+/// Install a specific version of a module.
+pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), String> {
+    let _module = crate::module_repo::find_module(module_name)
+        .ok_or_else(|| format!("Unknown module: {}", module_name))?;
+
+    let dest = fs::envswitch_home().join("envs").join(module_name).join(version);
+
+    // Check if already installed
+    if dest.exists() && !force {
+        return Err(format!(
+            "{} {} is already installed. Use --force to reinstall.",
+            module_name, version
+        ));
+    }
+
+    eprintln!("Downloading {} {} ...", module_name, version);
+
+    // Dispatch to the correct provider
+    match module_name {
+        "jdk" => {
+            eprintln!("Querying Adoptium API for JDK {}...", version);
+            let asset = providers::jdk::JdkProvider::fetch_asset(version)?;
+            eprintln!("Downloading {}...", asset.filename);
+            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            eprintln!("Verifying SHA256...");
+            download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            eprintln!("Extracting...");
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            providers::jdk::JdkProvider::install(&archive, &dest)?;
+            fix_exec_permissions(&dest)?;
+        }
+        "go" => {
+            eprintln!("Querying go.dev for Go {}...", version);
+            let asset = providers::go::GoProvider::fetch_asset(version)?;
+            eprintln!("Downloading {}...", asset.version);
+            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            eprintln!("Verifying SHA256...");
+            download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            eprintln!("Extracting...");
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            providers::go::GoProvider::install(&archive, &dest)?;
+            // Fix permissions: go.dev tarballs may not preserve exec bits
+            fix_exec_permissions(&dest)?;
+        }
+        "mysql" => {
+            let url = providers::mysql::MySqlProvider::download_url(version);
+            let archive = download::download_file(&url, module_name, version)?;
+            eprintln!("Extracting...");
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            providers::mysql::MySqlProvider::install(&archive, &dest)?;
+        }
+        _ => return Err(format!("No provider for module: {}", module_name)),
+    }
+
+    // Record metadata
+    let size = fs::disk_usage(&dest);
+    let installed = InstalledVersion {
+        module_name: module_name.to_string(),
+        version: version.to_string(),
+        install_path: dest,
+        installed_at: Utc::now(),
+        size_bytes: size,
+    };
+
+    let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
+    meta.versions.retain(|v| v.version != version);
+    meta.versions.push(installed);
+    fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
+
+    eprintln!("{} {} installed successfully.", module_name, version);
+    Ok(())
+}
+
+/// Uninstall a specific version of a module.
+/// Fix executable permissions on bin/ files after tar extraction.
+fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
+    for subdir in &["bin", "sbin", "libexec"] {
+        let dir = install_path.join(subdir);
+        if dir.exists() {
+            for entry in std::fs::read_dir(&dir).map_err(|e| format!("read_dir: {}", e))? {
+                let entry = entry.map_err(|e| format!("entry: {}", e))?;
+                let path = entry.path();
+                if path.is_file() {
+                    let _ = std::fs::set_permissions(
+                        &path,
+                        std::fs::Permissions::from_mode(0o755),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), String> {
+    let module = crate::module_repo::find_module(module_name)
+        .ok_or_else(|| format!("Unknown module: {}", module_name))?;
+
+    // Check if covered
+    let covers = crate::environment::get_status();
+    if covers.iter().any(|c| c.module_name == module_name && c.version == version) {
+        return Err(format!(
+            "Cannot uninstall {} {}: it is currently covered. Run 'envswitch uncover {}' first.",
+            module_name, version, module_name
+        ));
+    }
+
+    let install_path = fs::envswitch_home().join("envs").join(module_name).join(version);
+    if !install_path.exists() {
+        return Err(format!("{} {} is not installed.", module_name, version));
+    }
+
+    std::fs::remove_dir_all(&install_path)
+        .map_err(|e| format!("Failed to remove {}: {}", install_path.display(), e))?;
+
+    // Remove from metadata
+    let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
+    meta.versions.retain(|v| v.version != version);
+    fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
+
+    // Purge data if requested
+    if purge {
+        let data_dir = fs::envswitch_home().join("data").join(module_name);
+        if data_dir.exists() {
+            std::fs::remove_dir_all(&data_dir)
+                .map_err(|e| format!("Failed to remove data: {}", e))?;
+        }
+    }
+
+    eprintln!("{} {} uninstalled.", module_name, version);
+    if !purge && module.category == crate::domain::ModuleCategory::Service {
+        let data_dir = fs::envswitch_home().join("data").join(module_name);
+        eprintln!("Data preserved at {}", data_dir.display());
+        eprintln!("Use --purge to also remove data.");
+    }
+    Ok(())
+}
+
+/// List all installed versions for a module.
+pub fn list_installed(module_name: &str) -> Result<Vec<InstalledVersion>, String> {
+    let meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
+    Ok(meta.versions)
+}
+
+/// List all installed versions across all modules.
+pub fn list_all_installed() -> Result<Vec<InstalledVersion>, String> {
+    let mut all = Vec::new();
+    for m in crate::module_repo::builtin_modules() {
+        if let Ok(meta) = fs::load_installed(&m.name) {
+            all.extend(meta.versions);
+        }
+    }
+    Ok(all)
+}
