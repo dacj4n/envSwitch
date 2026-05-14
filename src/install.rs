@@ -13,6 +13,15 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
 
     eprintln!("Platform: {}", crate::platform::Platform::current().display());
 
+    // Platform compatibility check (before "already installed")
+    match module_name {
+        "mysql" => {
+            // This will fail early if the version/platform combo is unsupported
+            let _url = crate::providers::mysql::MySqlProvider::download_url(version)?;
+        }
+        _ => {}
+    }
+
     // Check if already installed
     if dest.exists() && !force {
         return Err(format!(
@@ -55,7 +64,7 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             fix_exec_permissions(&dest)?;
         }
         "mysql" => {
-            let url = providers::mysql::MySqlProvider::download_url(version);
+            let url = providers::mysql::MySqlProvider::download_url(version)?;
             let archive = download::download_file(&url, module_name, version)?;
             eprintln!("Extracting...");
             if dest.exists() {

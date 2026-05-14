@@ -17,14 +17,25 @@ impl MySqlProvider {
         ])
     }
 
-    pub fn download_url(version: &str) -> String {
+    pub fn download_url(version: &str) -> Result<String, String> {
         let platform = Platform::current();
         let tag = platform.mysql_os_tag();
         let ver_dir = Platform::mysql_version_dir(version);
-        format!(
-            "https://dev.mysql.com/get/Downloads/{}/mysql-{}-{}.tar.gz",
+
+        // MySQL 5.7 doesn't support ARM64
+        if version.starts_with("5.") && tag.contains("arm64") {
+            return Err(format!(
+                "MySQL {} does not support ARM64 (Apple Silicon).\n\
+                 Use MySQL 8.0+ instead: envswitch install mysql 8.0.37",
+                version
+            ));
+        }
+
+        // Use CDN URL (dev.mysql.com/get redirects to HTML page)
+        Ok(format!(
+            "https://cdn.mysql.com/Downloads/{}/mysql-{}-{}.tar.gz",
             ver_dir, version, tag
-        )
+        ))
     }
 
     pub fn checksum_url(_version: &str) -> Option<String> { None }
