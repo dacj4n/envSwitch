@@ -20,7 +20,6 @@ impl GoProvider {
         let data = fetch_json()?;
         let versions: Vec<String> = data
             .iter()
-            .filter(|v| v.stable)
             .map(|v| v.version.trim_start_matches("go").to_string())
             .collect();
         if versions.is_empty() { return Err("No Go versions found".into()); }
@@ -59,7 +58,7 @@ impl GoProvider {
 
 fn fetch_json() -> Result<Vec<GoVersion>, String> {
     let output = std::process::Command::new("curl")
-        .args(["-sL", "https://go.dev/dl/?mode=json"])
+        .args(["-sL", "https://go.dev/dl/?mode=json&include=all"])
         .output()
         .map_err(|e| format!("curl failed: {}", e))?;
 
