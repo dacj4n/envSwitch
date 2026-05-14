@@ -35,7 +35,7 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
     // Dispatch to the correct provider
     match module_name {
         "jdk" => {
-            eprintln!("Querying JDK provider for {}...", version);
+            eprintln!("Querying Azul Zulu for JDK {}...", version);
             let asset = providers::jdk::JdkProvider::fetch_asset(version)?;
             eprintln!("Downloading {}...", asset.filename);
             let archive = download::download_file(&asset.download_url, module_name, version)?;

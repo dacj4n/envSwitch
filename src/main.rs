@@ -119,7 +119,7 @@ fn cmd_remote(module_name: &str) -> Result<(), String> {
             for v in &versions { println!("  {}", v.version); }
         }
         "jdk" => {
-            eprintln!("Fetching JDK versions from Adoptium...");
+            eprintln!("Fetching JDK versions from Azul Zulu...");
             let versions = providers::jdk::JdkProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v); }
         }
