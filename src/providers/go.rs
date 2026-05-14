@@ -1,21 +1,12 @@
+use crate::platform::Platform;
 use serde::Deserialize;
 
-/// Go download file entry from go.dev JSON API.
 #[derive(Debug, Deserialize)]
-struct GoFile {
-    filename: String,
-    sha256: String,
-}
+struct GoFile { filename: String, sha256: String }
 
-/// Go version entry from go.dev JSON API.
 #[derive(Debug, Deserialize)]
-struct GoVersion {
-    version: String,
-    stable: bool,
-    files: Vec<GoFile>,
-}
+struct GoVersion { version: String, stable: bool, files: Vec<GoFile> }
 
-/// Go provider using go.dev download API.
 pub struct GoProvider;
 
 pub struct GoAsset {
@@ -32,16 +23,14 @@ impl GoProvider {
             .filter(|v| v.stable)
             .map(|v| v.version.trim_start_matches("go").to_string())
             .collect();
-        if versions.is_empty() {
-            return Err("No Go versions found".into());
-        }
+        if versions.is_empty() { return Err("No Go versions found".into()); }
         Ok(versions)
     }
 
-    /// Fetch the download URL and checksum for a specific version.
     pub fn fetch_asset(version: &str) -> Result<GoAsset, String> {
-        let os = if cfg!(target_os = "macos") { "darwin" } else { "linux" };
-        let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "amd64" };
+        let platform = Platform::current();
+        let os = platform.go_os();
+        let arch = platform.go_arch();
 
         let data = fetch_json()?;
         let search = format!("go{}", version);
@@ -60,7 +49,7 @@ impl GoProvider {
             }
         }
 
-        Err(format!("No Go {} binary found for {}/{}", version, os, arch))
+        Err(format!("No Go {} binary found for {}", version, platform.display()))
     }
 
     pub fn install(archive: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
@@ -74,9 +63,7 @@ fn fetch_json() -> Result<Vec<GoVersion>, String> {
         .output()
         .map_err(|e| format!("curl failed: {}", e))?;
 
-    if !output.status.success() {
-        return Err("Failed to fetch Go versions".into());
-    }
+    if !output.status.success() { return Err("Failed to fetch Go versions".into()); }
 
     let text = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))

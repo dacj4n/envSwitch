@@ -1,12 +1,10 @@
-use crate::domain::{ArchiveFormat, ChecksumType};
+use crate::domain::ArchiveFormat;
 use crate::infra::download;
+use crate::platform::Platform;
 use serde::Deserialize;
 
-/// Result from Adoptium assets API.
 #[derive(Debug, Deserialize)]
-struct AdoptiumAsset {
-    binaries: Vec<AdoptiumBinary>,
-}
+struct AdoptiumAsset { binaries: Vec<AdoptiumBinary> }
 
 #[derive(Debug, Deserialize)]
 struct AdoptiumBinary {
@@ -23,7 +21,6 @@ struct AdoptiumPackage {
     checksum: String,
 }
 
-/// Adoptium (Eclipse Temurin) JDK provider.
 pub struct JdkProvider;
 
 pub struct JdkAsset {
@@ -60,10 +57,10 @@ impl JdkProvider {
         Ok(versions)
     }
 
-    /// Query the Adoptium API for the actual download asset for a version.
     pub fn fetch_asset(version: &str) -> Result<JdkAsset, String> {
-        let os = if cfg!(target_os = "macos") { "mac" } else { "linux" };
-        let arch = if cfg!(target_arch = "x86_64") { "x64" } else { "aarch64" };
+        let platform = Platform::current();
+        let os = platform.adoptium_os();
+        let arch = platform.adoptium_arch();
 
         let api_url = format!(
             "https://api.adoptium.net/v3/assets/feature_releases/{}/ga?\
@@ -85,7 +82,6 @@ impl JdkProvider {
         let assets: Vec<AdoptiumAsset> =
             serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))?;
 
-        // Find the first matching binary
         for asset in &assets {
             for binary in &asset.binaries {
                 if binary.architecture == arch && binary.os == os {
@@ -99,8 +95,9 @@ impl JdkProvider {
         }
 
         Err(format!(
-            "No JDK {} binary found for {}/{}",
-            version, os, arch
+            "No JDK {} binary found for {}",
+            version,
+            platform.display()
         ))
     }
 

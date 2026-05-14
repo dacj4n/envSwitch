@@ -4,6 +4,7 @@ mod environment;
 mod infra;
 mod install;
 mod module_repo;
+mod platform;
 mod project;
 mod providers;
 mod service_mgr;

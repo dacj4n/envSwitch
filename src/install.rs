@@ -11,6 +11,8 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
 
     let dest = fs::envswitch_home().join("envs").join(module_name).join(version);
 
+    eprintln!("Platform: {}", crate::platform::Platform::current().display());
+
     // Check if already installed
     if dest.exists() && !force {
         return Err(format!(
