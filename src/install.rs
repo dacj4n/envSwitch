@@ -148,18 +148,47 @@ pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), St
     Ok(())
 }
 
-/// List all installed versions for a module.
+/// List all installed versions for a module by scanning the filesystem.
 pub fn list_installed(module_name: &str) -> Result<Vec<InstalledVersion>, String> {
-    let meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
-    Ok(meta.versions)
+    let envs_dir = fs::envswitch_home().join("envs").join(module_name);
+    if !envs_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let meta = fs::load_installed(module_name).ok();
+    let mut versions = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(&envs_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                let version = entry.file_name().to_string_lossy().to_string();
+                if version == "current" || version.starts_with('.') {
+                    continue;
+                }
+                // Find metadata or create stub
+                let known = meta.as_ref().and_then(|m| m.versions.iter().find(|v| v.version == version));
+                let installed = known.cloned().unwrap_or_else(|| InstalledVersion {
+                    module_name: module_name.to_string(),
+                    version,
+                    install_path: entry.path(),
+                    installed_at: chrono::Utc::now(),
+                    size_bytes: fs::disk_usage(&entry.path()),
+                });
+                versions.push(installed);
+            }
+        }
+    }
+    // Sort by version (newest first, simple string sort)
+    versions.sort_by(|a, b| b.version.cmp(&a.version));
+    Ok(versions)
 }
 
-/// List all installed versions across all modules.
+/// List all installed versions across all modules by scanning the filesystem.
 pub fn list_all_installed() -> Result<Vec<InstalledVersion>, String> {
     let mut all = Vec::new();
     for m in crate::module_repo::builtin_modules() {
-        if let Ok(meta) = fs::load_installed(&m.name) {
-            all.extend(meta.versions);
+        if let Ok(v) = list_installed(&m.name) {
+            all.extend(v);
         }
     }
     Ok(all)
