@@ -9,11 +9,11 @@ pub struct MySqlProvider;
 
 impl MySqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<String>, String> {
-        // MySQL doesn't have a simple public JSON API for versions.
         Ok(vec![
-            "8.0.37".into(), "8.0.36".into(), "8.0.35".into(),
             "8.4.1".into(), "8.4.0".into(),
-            "5.7.44".into(),
+            "8.0.37".into(), "8.0.36".into(), "8.0.35".into(),
+            // MySQL 5.7 is EOL and no longer available for direct download.
+            // Download manually from https://downloads.mysql.com/archives/community/
         ])
     }
 
@@ -22,11 +22,12 @@ impl MySqlProvider {
         let tag = platform.mysql_os_tag();
         let ver_dir = Platform::mysql_version_dir(version);
 
-        // MySQL 5.7 doesn't support ARM64
-        if version.starts_with("5.") && tag.contains("arm64") {
+        // MySQL 5.7 is EOL, not available for direct download
+        if version.starts_with("5.") {
             return Err(format!(
-                "MySQL {} does not support ARM64 (Apple Silicon).\n\
-                 Use MySQL 8.0+ instead: envswitch install mysql 8.0.37",
+                "MySQL {} is EOL and no longer available for direct download.\n\
+                 Download manually: https://downloads.mysql.com/archives/community/\n\
+                 Or use MySQL 8.0+: envswitch install mysql 8.0.37",
                 version
             ));
         }
