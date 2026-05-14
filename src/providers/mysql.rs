@@ -15,14 +15,15 @@ impl MySqlProvider {
 
         // Probe CDN for available versions
         // MySQL major versions: 9.x (Innovation), 8.4 (LTS), 8.0 (LTS)
+        // Limit probes: only latest patches to keep it fast
         let probes: Vec<(&str, &[&str])> = vec![
-            ("9.2", &["0", "1"]),
-            ("9.1", &["0", "1", "2"]),
+            ("9.1", &["0", "1"]),
             ("9.0", &["0", "1"]),
-            ("8.4", &["0", "1", "2", "3", "4"]),
-            ("8.0", &["37", "38", "39", "40"]),
+            ("8.4", &["0", "1", "2"]),
+            ("8.0", &["37", "38"]),
         ];
 
+        eprintln!("Probing MySQL CDN...");
         for (major, patches) in &probes {
             for patch in *patches {
                 let version = format!("{}.{}", major, patch);
@@ -31,7 +32,11 @@ impl MySqlProvider {
                     major, version, tag
                 );
                 let output = std::process::Command::new("curl")
-                    .args(["-sIL", "-o", "/dev/null", "-w", "%{http_code}", &url])
+                    .args([
+                        "-sIL", "-o", "/dev/null", "-w", "%{http_code}",
+                        "--connect-timeout", "2", "--max-time", "3",
+                        &url,
+                    ])
                     .output()
                     .map_err(|e| format!("curl failed: {}", e))?;
 
