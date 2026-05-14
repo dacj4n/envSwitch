@@ -147,3 +147,13 @@ pub struct GlobalCoverEntry {
 pub struct InstalledMetadata {
     pub versions: Vec<InstalledVersion>,
 }
+
+/// A remote version with platform availability info.
+#[derive(Debug, Clone)]
+pub struct RemoteVersion {
+    pub version: String,
+    /// Platform tags this version is available for, e.g. ["macOS ARM64", "macOS x64"]
+    pub platforms: Vec<String>,
+    /// Whether this version is available for the current platform
+    pub current_platform: bool,
+}

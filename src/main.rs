@@ -113,14 +113,28 @@ fn cmd_list(module: Option<String>) -> Result<(), String> {
 
 fn cmd_remote(module_name: &str) -> Result<(), String> {
     match module_name {
-        "jdk" => {
-            eprintln!("Fetching JDK versions from Adoptium...");
-            let versions = providers::jdk::JdkProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v); }
-        }
         "go" => {
             eprintln!("Fetching Go versions from go.dev...");
             let versions = providers::go::GoProvider::fetch_remote_versions()?;
+            let current = platform::Platform::current();
+            println!("{:<16} {}", "VERSION", "PLATFORMS");
+            println!("{}", "-".repeat(60));
+            for v in &versions {
+                let mark = if v.current_platform { "✓" } else { "✗" };
+                // Only show versions compatible with current platform, or show all?
+                // Show all but mark incompatible ones
+                let plat_str = if v.platforms.len() <= 4 {
+                    v.platforms.join(", ")
+                } else {
+                    format!("{} (+{} more)", v.platforms[..3].join(", "), v.platforms.len() - 3)
+                };
+                let note = if !v.current_platform { format!(" [no {} build]", current.display()) } else { String::new() };
+                println!("{:>4} {:<16} {}{}", mark, v.version, plat_str, note);
+            }
+        }
+        "jdk" => {
+            eprintln!("Fetching JDK versions from Adoptium...");
+            let versions = providers::jdk::JdkProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v); }
         }
         "mysql" => {
