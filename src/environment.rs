@@ -194,3 +194,136 @@ fn save_stack(stack: &[StackEntry]) {
     let data = serde_json::to_string_pretty(stack).unwrap_or_default();
     let _ = std::fs::write(&path, data);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn setup_test_home() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("envswitch_test_{}", n));
+        let _ = fs::remove_dir_all(&dir);
+        // Clear any leftover state from previous test in same thread
+        let _ = fs::remove_dir_all(&std::env::temp_dir().join("envswitch_state"));
+        let _ = fs::remove_dir_all(&dir);
+        std::env::set_var("ENVSWITCH_HOME", &dir);
+        // Create mock install dirs
+        for (mod_name, ver) in &[("jdk", "21"), ("jdk", "17"), ("go", "1.22")] {
+            let p = dir.join("envs").join(mod_name).join(ver).join("bin");
+            fs::create_dir_all(&p).unwrap();
+            fs::write(p.join("java"), b"fake").unwrap();
+            fs::write(p.join("go"), b"fake").unwrap();
+        }
+        dir
+    }
+
+    fn teardown(dir: &std::path::Path) {
+        let _ = fs::remove_dir_all(dir);
+        std::env::remove_var("ENVSWITCH_HOME");
+    }
+
+    #[test]
+    fn test_cover_adds_to_stack() {
+        let dir = setup_test_home();
+        let result = cover("jdk", "21", CoverScope::Session);
+        assert!(result.is_ok());
+        let script = result.unwrap();
+        assert!(script.contains("JAVA_HOME"));
+        assert!(script.contains("ENVSWITCH_SAVED_PATH"));
+        let status = get_status();
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].module_name, "jdk");
+        assert_eq!(status[0].version, "21");
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_cover_same_version_noop() {
+        let dir = setup_test_home();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        // Second cover of same version should still succeed but log no-op
+        let result = cover("jdk", "21", CoverScope::Session);
+        assert!(result.is_ok());
+        // Stack should still have only one entry
+        assert_eq!(get_status().len(), 1);
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_cover_new_version_replaces() {
+        let dir = setup_test_home();
+        cover("jdk", "17", CoverScope::Session).unwrap();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        let status = get_status();
+        // Only one jdk, should be 21
+        let jdk: Vec<_> = status.iter().filter(|c| c.module_name == "jdk").collect();
+        assert_eq!(jdk.len(), 1);
+        assert_eq!(jdk[0].version, "21");
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_multi_module_stack() {
+        let dir = setup_test_home();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        cover("go", "1.22", CoverScope::Session).unwrap();
+        let status = get_status();
+        assert_eq!(status.len(), 2);
+        assert_eq!(status[0].module_name, "jdk"); // first covered
+        assert_eq!(status[1].module_name, "go");   // second covered
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_uncover_removes_from_stack() {
+        let dir = setup_test_home();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        cover("go", "1.22", CoverScope::Session).unwrap();
+        let result = uncover("jdk");
+        assert!(result.is_ok());
+        let status = get_status();
+        assert_eq!(status.len(), 1);
+        assert_eq!(status[0].module_name, "go");
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_uncover_all_clears_stack() {
+        let dir = setup_test_home();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        cover("go", "1.22", CoverScope::Session).unwrap();
+        let result = uncover_all();
+        assert!(result.is_ok());
+        assert!(get_status().is_empty());
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_full_rebuild_contains_all_vars() {
+        let dir = setup_test_home();
+        let _script = cover("jdk", "21", CoverScope::Session).unwrap();
+        let script2 = cover("go", "1.22", CoverScope::Session).unwrap();
+        assert!(script2.contains("JAVA_HOME"));
+        assert!(script2.contains("GOROOT"));
+        assert!(script2.contains("ENVSWITCH_SAVED_PATH"));
+        // PATH should have both jdk and go
+        assert!(script2.contains("jdk/21"));
+        assert!(script2.contains("go/1.22"));
+        teardown(&dir);
+    }
+
+    #[test]
+    fn test_uncover_restores_path() {
+        let dir = setup_test_home();
+        cover("jdk", "21", CoverScope::Session).unwrap();
+        let script = uncover("jdk").unwrap();
+        // After uncover, PATH should reference only SAVED_PATH
+        assert!(script.contains("ENVSWITCH_SAVED_PATH"));
+        assert!(!script.contains("jdk/21"));
+        assert!(get_status().is_empty());
+        teardown(&dir);
+    }
+}
