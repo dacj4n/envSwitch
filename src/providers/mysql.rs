@@ -9,12 +9,45 @@ pub struct MySqlProvider;
 
 impl MySqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<String>, String> {
-        Ok(vec![
-            "8.4.1".into(), "8.4.0".into(),
-            "8.0.37".into(), "8.0.36".into(), "8.0.35".into(),
-            // MySQL 5.7 is EOL and no longer available for direct download.
-            // Download manually from https://downloads.mysql.com/archives/community/
-        ])
+        let platform = Platform::current();
+        let tag = platform.mysql_os_tag();
+        let mut versions = Vec::new();
+
+        // Probe CDN for available versions
+        // MySQL major versions: 9.x (Innovation), 8.4 (LTS), 8.0 (LTS)
+        let probes: Vec<(&str, &[&str])> = vec![
+            ("9.2", &["0", "1"]),
+            ("9.1", &["0", "1", "2"]),
+            ("9.0", &["0", "1"]),
+            ("8.4", &["0", "1", "2", "3", "4"]),
+            ("8.0", &["37", "38", "39", "40"]),
+        ];
+
+        for (major, patches) in &probes {
+            for patch in *patches {
+                let version = format!("{}.{}", major, patch);
+                let url = format!(
+                    "https://cdn.mysql.com/Downloads/MySQL-{}/mysql-{}-{}.tar.gz",
+                    major, version, tag
+                );
+                let output = std::process::Command::new("curl")
+                    .args(["-sIL", "-o", "/dev/null", "-w", "%{http_code}", &url])
+                    .output()
+                    .map_err(|e| format!("curl failed: {}", e))?;
+
+                if String::from_utf8_lossy(&output.stdout).trim() == "200" {
+                    versions.push(version);
+                }
+            }
+        }
+
+        if versions.is_empty() {
+            return Err("No MySQL versions found for your platform. Try https://downloads.mysql.com/archives/community/".into());
+        }
+
+        // Sort newest first (simple string sort works for semver-like)
+        versions.sort_by(|a, b| b.cmp(a));
+        Ok(versions)
     }
 
     pub fn download_url(version: &str) -> Result<String, String> {
