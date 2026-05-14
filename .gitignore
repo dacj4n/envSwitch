@@ -20,3 +20,8 @@ Thumbs.db
 
 # docs
 docs/
+
+
+# Added by cargo
+
+/target
