@@ -1,0 +1,22 @@
+# Rust build
+target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+memory/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# envSwitch runtime (user's local env)
+.envswitch/
+
+# docs
+docs/
