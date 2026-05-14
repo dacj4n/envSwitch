@@ -38,9 +38,10 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
         .collect();
 
     if module_name == "jdk" {
-        let home = install_path.join("Contents").join("Home");
-        if home.exists() {
-            bin_paths = vec![home.join("bin")];
+        let home = crate::install::find_jdk_home(&install_path);
+        let bin = home.join("bin");
+        if bin.exists() {
+            bin_paths = vec![bin];
         }
     }
 

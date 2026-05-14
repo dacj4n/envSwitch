@@ -101,22 +101,48 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
 /// Uninstall a specific version of a module.
 /// Fix executable permissions on bin/ files after tar extraction.
 fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
+    // Handle macOS .jdk bundle: real binaries are in <name>.jdk/Contents/Home/
+    let effective_root = find_jdk_home(install_path);
+
     for subdir in &["bin", "sbin", "libexec"] {
-        let dir = install_path.join(subdir);
-        if dir.exists() {
-            for entry in std::fs::read_dir(&dir).map_err(|e| format!("read_dir: {}", e))? {
-                let entry = entry.map_err(|e| format!("entry: {}", e))?;
-                let path = entry.path();
-                if path.is_file() {
-                    let _ = std::fs::set_permissions(
-                        &path,
-                        std::fs::Permissions::from_mode(0o755),
-                    );
+        let dir = effective_root.join(subdir);
+        if dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() || path.is_symlink() {
+                        let _ = std::fs::set_permissions(
+                            &path,
+                            std::fs::Permissions::from_mode(0o755),
+                        );
+                    }
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Find the effective JDK home: if a .jdk bundle exists, use Contents/Home inside it.
+pub fn find_jdk_home(install_path: &std::path::Path) -> std::path::PathBuf {
+    // Look for .jdk bundle directories
+    if let Ok(entries) = std::fs::read_dir(install_path) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".jdk") && entry.path().is_dir() {
+                let home = entry.path().join("Contents").join("Home");
+                if home.exists() {
+                    return home;
+                }
+            }
+        }
+    }
+    // Also check if there's a Contents/Home directly (some JDK layouts)
+    let home = install_path.join("Contents").join("Home");
+    if home.exists() {
+        return home;
+    }
+    install_path.to_path_buf()
 }
 
 pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), String> {
