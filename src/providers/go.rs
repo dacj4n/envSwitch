@@ -43,21 +43,12 @@ impl GoProvider {
                 }
             }
 
-            if !platforms.is_empty() {
-                // Sort: macOS first, then Linux, then Windows
-                platforms.sort_by(|a, b| {
-                    let os_order = |s: &str| match s {
-                        s if s.starts_with("macOS") => 0,
-                        s if s.starts_with("Linux") => 1,
-                        _ => 2,
-                    };
-                    os_order(a).cmp(&os_order(b))
-                        .then_with(|| a.cmp(b))
-                });
+            // Only show versions available for the current platform
+            if current_ok {
                 versions.push(RemoteVersion {
                     version: ver_str,
-                    platforms,
-                    current_platform: current_ok,
+                    platforms: Vec::new(), // not displayed
+                    current_platform: true,
                 });
             }
         }
