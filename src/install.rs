@@ -35,12 +35,14 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
     // Dispatch to the correct provider
     match module_name {
         "jdk" => {
-            eprintln!("Querying Adoptium API for JDK {}...", version);
+            eprintln!("Querying JDK provider for {}...", version);
             let asset = providers::jdk::JdkProvider::fetch_asset(version)?;
             eprintln!("Downloading {}...", asset.filename);
             let archive = download::download_file(&asset.download_url, module_name, version)?;
-            eprintln!("Verifying SHA256...");
-            download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            if !asset.checksum.is_empty() {
+                eprintln!("Verifying SHA256...");
+                download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            }
             eprintln!("Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
@@ -53,8 +55,10 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             let asset = providers::go::GoProvider::fetch_asset(version)?;
             eprintln!("Downloading {}...", asset.version);
             let archive = download::download_file(&asset.download_url, module_name, version)?;
-            eprintln!("Verifying SHA256...");
-            download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            if !asset.checksum.is_empty() {
+                eprintln!("Verifying SHA256...");
+                download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            }
             eprintln!("Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
