@@ -21,9 +21,7 @@ impl PhpProvider {
             let line = line.trim();
             // Match: "php@8.3", "shivammathur/php/php@5.6"
             if let Some(ver) = line.split("php@").nth(1) {
-                // Extract version: "8.3", "5.6" (strip any suffix like -debug)
                 let ver = ver.split_whitespace().next().unwrap_or(ver);
-                let ver = ver.split('-').next().unwrap_or(ver);
                 if !ver.is_empty() && ver.chars().next().map_or(false, |c| c.is_ascii_digit()) {
                     versions.insert(ver.to_string());
                 }
@@ -83,41 +81,38 @@ impl PhpProvider {
 }
 
 fn determine_formula(version: &str) -> Result<String, String> {
-    // Check if core formula exists
+    // Check core formula first
     let core = format!("php@{}", version);
-    let check = std::process::Command::new("brew")
-        .args(["--prefix", &core])
-        .output()
-        .map_err(|_| "Homebrew not found".to_string())?;
-
-    if check.status.success() {
-        return Ok(core);
-    }
+    if brew_exists(&core) { return Ok(core); }
 
     // Check shivammathur tap
     let tap = format!("shivammathur/php/php@{}", version);
-    let check2 = std::process::Command::new("brew")
-        .args(["--prefix", &tap])
+    if brew_exists(&tap) { return Ok(tap); }
+
+    // Search brew to find which tap has this version
+    let search = std::process::Command::new("brew")
+        .args(["search", &format!("/php@{}", version)])
         .output()
         .map_err(|_| "Homebrew not found".to_string())?;
 
-    if check2.status.success() {
-        return Ok(tap);
-    }
-
-    // Formula not installed. Try to install from core first.
-    // Check brew search to see which tap has it
-    let search = std::process::Command::new("brew")
-        .args(["search", &format!("php@{}", version)])
-        .output()
-        .unwrap_or_else(|_| std::process::Output { status: Default::default(), stdout: vec![], stderr: vec![] });
-
     let text = String::from_utf8_lossy(&search.stdout);
-    if text.contains(&format!("shivammathur/php/php@{}", version)) {
-        Ok(tap)
-    } else {
-        Ok(core) // Try core, might work if user taps it
+    for line in text.lines() {
+        let line = line.trim();
+        if line.contains(&format!("php@{}", version)) && !line.contains('-') {
+            return Ok(line.to_string());
+        }
     }
+
+    // Default: try core formula
+    Ok(core)
+}
+
+fn brew_exists(formula: &str) -> bool {
+    std::process::Command::new("brew")
+        .args(["--prefix", formula])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), String> {
