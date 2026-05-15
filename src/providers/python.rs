@@ -83,6 +83,11 @@ impl PythonProvider {
         std::os::unix::fs::symlink(&brew_bin, &dest_bin)
             .map_err(|e| format!("symlink: {}", e))?;
 
+        // Create `python` -> `python3` symlink (Homebrew only provides python3)
+        let python_link = dest_bin.join("python");
+        let _ = std::fs::remove_file(&python_link);
+        std::os::unix::fs::symlink("python3", &python_link).ok();
+
         eprintln!("Python {} linked from {}", actual, brew_path);
         Ok(actual)
     }
