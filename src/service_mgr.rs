@@ -76,17 +76,10 @@ pub fn stop(module_name: &str) -> Result<(), String> {
         return Err(format!("{} is not a service module.", module_name));
     }
 
-    let check = status(module_name)?;
-    if check.running.is_none() {
-        eprintln!("{} is not running.", module_name);
-        return Ok(());
-    }
-
-    let svc = check.running.unwrap();
-
     match module_name {
         "mysql" => {
-            crate::providers::mysql::MySqlProvider::stop_service(svc.pid)?;
+            let pid = fs::read_pid_file(module_name).unwrap_or(0);
+            crate::providers::mysql::MySqlProvider::stop_service(pid)?;
         }
         _ => return Err(format!("No service adapter for: {}", module_name)),
     }

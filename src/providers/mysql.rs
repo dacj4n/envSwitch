@@ -142,12 +142,25 @@ impl MySqlProvider {
         })
     }
 
-    pub fn stop_service(pid: u32) -> Result<(), String> {
-        let _ = Command::new("mysqladmin").args(["-u", "root", "-h", "127.0.0.1", "shutdown"]).output();
+    pub fn stop_service(_pid: u32) -> Result<(), String> {
+        // Try graceful shutdown via mysqladmin first
+        eprintln!("Stopping MySQL...");
+        let _ = Command::new("mysqladmin")
+            .args(["-u", "root", "-h", "127.0.0.1", "shutdown"])
+            .output();
         std::thread::sleep(std::time::Duration::from_secs(2));
-        if crate::infra::fs::read_pid_file("mysql").is_some() {
-            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), nix::sys::signal::Signal::SIGTERM)
-                .map_err(|e| format!("SIGTERM: {}", e))?;
+
+        // Check if still running
+        if let Ok(output) = Command::new("pgrep").args(["-x", "mysqld"]).output() {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            for pid_str in pids.lines() {
+                if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                    let _ = nix::sys::signal::kill(
+                        nix::unistd::Pid::from_raw(pid),
+                        nix::sys::signal::Signal::SIGTERM,
+                    );
+                }
+            }
         }
         Ok(())
     }
