@@ -145,13 +145,30 @@ fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
 fn build_php(install_path: &std::path::Path) -> Result<(), String> {
     let path_str = install_path.to_string_lossy();
 
-    // Check if source files exist (configure script)
+    // Generate configure if needed (shivammathur source doesn't ship with it)
     if !install_path.join("configure").exists() {
-        return Err("PHP source not found after extraction (no configure script)".into());
+        if install_path.join("buildconf").exists() {
+            eprintln!("Generating configure script (buildconf)...");
+            let _ = std::process::Command::new("chmod")
+                .args(["+x", "buildconf"])
+                .current_dir(install_path)
+                .status();
+            let status = std::process::Command::new("./buildconf")
+                .arg("--force")
+                .current_dir(install_path)
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .map_err(|e| format!("buildconf failed: {}. Install autoconf, pkgconf, re2c.", e))?;
+            if !status.success() {
+                return Err("buildconf failed. Install build tools: brew install autoconf pkgconf re2c bison".into());
+            }
+        } else {
+            return Err("PHP source not found after extraction (no configure script)".into());
+        }
     }
 
     eprintln!("Configuring PHP (dev build)...");
-    // Ensure configure is executable (tar extraction may not preserve mode)
     let _ = std::process::Command::new("chmod")
         .args(["+x", "configure"])
         .current_dir(install_path)
