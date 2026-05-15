@@ -47,7 +47,20 @@ envswitch init zsh
 exec zsh
 ```
 
-Requirements: [Homebrew](https://brew.sh) (for PHP, Python, MySQL, PostgreSQL), `curl`.
+Requirements: `curl`, `rust` (build only).
+
+For PHP, Python, MySQL, PostgreSQL modules, [Homebrew](https://brew.sh) is required.
+
+### Linux
+
+Install [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux) — all modules work identically to macOS:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+```
+
+If `brew` is not found when installing a module, envSwitch will show the Linuxbrew install guide.
 
 ## Supported Modules
 

@@ -45,7 +45,20 @@ envswitch init zsh
 exec zsh
 ```
 
-依赖：[Homebrew](https://brew.sh)（PHP、Python、MySQL、PostgreSQL 需要）、`curl`。
+依赖：`curl`、`rust`（仅编译时需要）。
+
+PHP、Python、MySQL、PostgreSQL 模块需要 [Homebrew](https://brew.sh)。
+
+### Linux
+
+安装 [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux) 后所有模块和 macOS 完全一致：
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+```
+
+如果安装模块时找不到 `brew`，envSwitch 会给出 Linuxbrew 安装指引。
 
 ## 支持的模块
 
