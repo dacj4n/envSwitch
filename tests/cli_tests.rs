@@ -205,13 +205,26 @@ fn test_cover_already_covered() {
 
 #[test]
 fn test_init_command() {
+    // This test only validates init.sh generation, not .zshrc writing
+    // (which depends on the real HOME directory)
+    use std::process::Command as Cmd;
     let home = test_home("init_cmd");
-    let output = run(&["init", "zsh"], &home);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    // Should create init.sh in envswitch home
+    let bin = binary();
+
+    // Set HOME to the test dir so .zshrc is written there
+    let output = Cmd::new(&bin)
+        .args(["init", "zsh"])
+        .env("ENVSWITCH_HOME", &home)
+        .env("HOME", &home)
+        .output()
+        .expect("Failed");
+    if !output.status.success() {
+        panic!("init failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
     assert!(home.join("init.sh").exists(), "init.sh not created");
-    // Should mention shell integration
-    assert!(stderr.contains("Shell integration"), "Got: {}", stderr);
+    assert!(home.join(".zshrc").exists(), ".zshrc not created");
+    let zshrc_content = std::fs::read_to_string(home.join(".zshrc")).unwrap();
+    assert!(zshrc_content.contains("source"), ".zshrc should have source line");
     let _ = fs::remove_dir_all(&home);
 }
 

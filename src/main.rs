@@ -287,7 +287,10 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     let _ = std::fs::create_dir_all(infra::fs::envswitch_home().join("shims"));
 
     // Auto-write source line to ~/.zshrc (idempotent — only once)
-    let home = dirs::home_dir().ok_or("Cannot find home dir")?;
+    let home = std::env::var("HOME").ok()
+        .map(std::path::PathBuf::from)
+        .or_else(dirs::home_dir)
+        .ok_or("Cannot find home dir")?;
     let zshrc = home.join(".zshrc");
     let source_line = format!("source {}", init_path.display());
     let mut content = std::fs::read_to_string(&zshrc).unwrap_or_default();
