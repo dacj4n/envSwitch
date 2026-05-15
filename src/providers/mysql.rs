@@ -105,6 +105,11 @@ impl MySqlProvider {
             .spawn()
             .map_err(|e| format!("mysqld: {}", e))?;
 
+        // Symlink /tmp/mysql.sock → version-specific socket (for client compatibility)
+        let tmp_sock = std::path::Path::new("/tmp/mysql.sock");
+        let _ = std::fs::remove_file(tmp_sock);
+        std::os::unix::fs::symlink(socket, tmp_sock).ok();
+
         Ok(RunningService {
             module_name: "mysql".into(), version: String::new(),
             pid: child.id(), port, started_at: Utc::now(),
