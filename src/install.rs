@@ -160,7 +160,10 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
     if cfg!(target_os = "macos") {
         cmd.env("PKG_CONFIG_PATH", format!("{}/lib/pkgconfig:{}/libxml2/lib/pkgconfig:{}/openssl@3/lib/pkgconfig:{}/curl/lib/pkgconfig:{}/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig", brew, brew, brew, brew, brew));
         cmd.env("LIBXML_CFLAGS", format!("-I{}/libxml2/include/libxml2", brew))
-           .env("LIBXML_LIBS", format!("-L{}/libxml2/lib -lxml2", brew));
+           .env("LIBXML_LIBS", format!("-L{}/libxml2/lib -lxml2", brew))
+           // macOS built-in sqlite3 (headers via Xcode CLT)
+           .env("SQLITE_CFLAGS", "-I/usr/include")
+           .env("SQLITE_LIBS", "-L/usr/lib -lsqlite3");
     }
     let status = cmd
         .args([
