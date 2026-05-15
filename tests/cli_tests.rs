@@ -214,3 +214,50 @@ fn test_init_command() {
     assert!(out.contains(&init_path.to_string_lossy().to_string()));
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn test_cover_unknown_module() {
+    let home = test_home("cover_unk");
+    let e = err(&["cover", "foobar", "1.0"], &home);
+    assert!(e.contains("Unknown module"), "Got: {}", e);
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_uncover_not_covered() {
+    let home = test_home("uncover_not");
+    let jdk_dir = home.join("envs").join("jdk").join("21").join("bin");
+    fs::create_dir_all(&jdk_dir).unwrap();
+    fs::write(jdk_dir.join("java"), b"fake").unwrap();
+
+    // uncover not-covered module → succeeds with no-op + message on stderr
+    let output = run(&["uncover", "jdk"], &home);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("not currently covered"), "Got: {}", stderr);
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_cover_to_uncover_all() {
+    let home = test_home("cover2all");
+
+    let jdk_dir = home.join("envs").join("jdk").join("21").join("bin");
+    fs::create_dir_all(&jdk_dir).unwrap();
+    fs::write(jdk_dir.join("java"), b"fake").unwrap();
+
+    // cover jdk
+    ok(&["cover", "jdk", "21"], &home);
+    // status shows it
+    let st = ok(&["status"], &home);
+    assert!(st.contains("jdk"));
+    // uncover --all
+    let out = ok(&["uncover", "--all"], &home);
+    // should restore to original PATH
+    assert!(out.contains("ENVSWITCH_SAVED_PATH"));
+    // status empty
+    let st2 = ok(&["status"], &home);
+    assert!(st2.contains("No active covers"));
+
+    let _ = fs::remove_dir_all(&home);
+}
