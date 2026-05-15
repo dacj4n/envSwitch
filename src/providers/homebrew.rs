@@ -15,8 +15,11 @@ pub fn brew_ensure(formula: &str) -> Result<(), String> {
 }
 
 pub fn brew_installed(formula: &str) -> bool {
-    std::process::Command::new("brew").args(["--prefix", formula]).output()
-        .map_or(false, |o| o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+    // brew list --formula <name> succeeds only if installed
+    std::process::Command::new("brew")
+        .args(["list", "--formula", formula])
+        .output()
+        .map_or(false, |o| o.status.success())
 }
 
 pub fn brew_prefix(formula: &str) -> Result<String, String> {
