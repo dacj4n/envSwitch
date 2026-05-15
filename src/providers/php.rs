@@ -7,7 +7,6 @@ use std::collections::BTreeSet;
 pub struct PhpProvider;
 
 impl PhpProvider {
-    /// Dynamically detect available PHP versions via `brew search`.
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
         let output = std::process::Command::new("brew")
             .args(["search", "php"])
@@ -19,7 +18,6 @@ impl PhpProvider {
 
         for line in text.lines() {
             let line = line.trim();
-            // Match: "php@8.3", "shivammathur/php/php@5.6"
             if let Some(ver) = line.split("php@").nth(1) {
                 let ver = ver.split_whitespace().next().unwrap_or(ver);
                 if !ver.is_empty() && ver.chars().next().map_or(false, |c| c.is_ascii_digit()) {
@@ -28,29 +26,29 @@ impl PhpProvider {
             }
         }
 
-        // Also add versions already installed via Homebrew
-        if let Ok(out) = std::process::Command::new("brew").args(["list", "--formula"]).output() {
-            for line in String::from_utf8_lossy(&out.stdout).lines() {
-                let line = line.trim();
-                if let Some(ver) = line.strip_prefix("php@") {
-                    let ver = ver.split('-').next().unwrap_or(ver);
-                    if !ver.is_empty() && ver.chars().next().map_or(false, |c| c.is_ascii_digit()) {
-                        versions.insert(ver.to_string());
-                    }
-                }
-            }
-        }
+        // Batch-query actual full versions via single brew info call
+        let full_versions = batch_get_versions(&versions);
 
-        let mut sorted: Vec<RemoteVersion> = versions
+        let mut result: Vec<RemoteVersion> = versions
             .into_iter()
-            .map(|v| RemoteVersion { version: v })
+            .map(|v| {
+                // Combine base version + variant suffix: "8.6-zts" → "8.6.0-zts"
+                let base = v.split('-').next().unwrap_or(&v);
+                let base_full = full_versions.get(base).cloned().unwrap_or_else(|| base.to_string());
+                let suffix = if v.contains('-') {
+                    v.splitn(2, '-').nth(1).map(|s| format!("-{}", s)).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                RemoteVersion { version: format!("{}{}", base_full, suffix) }
+            })
             .collect();
-        sorted.sort_by(|a, b| b.version.cmp(&a.version));
+        result.sort_by(|a, b| b.version.cmp(&a.version));
 
-        if sorted.is_empty() {
-            return Err("No PHP versions found via Homebrew. Run: brew tap shivammathur/php".into());
+        if result.is_empty() {
+            return Err("No PHP versions found. Tap shivammathur: brew tap shivammathur/php".into());
         }
-        Ok(sorted)
+        Ok(result)
     }
 
     /// Install PHP via Homebrew and symlink into envswitch.
@@ -105,6 +103,38 @@ fn determine_formula(version: &str) -> Result<String, String> {
 
     // Default: try core formula
     Ok(core)
+}
+
+/// Query brew info for all versions in one batch call.
+fn batch_get_versions(versions: &BTreeSet<String>) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+
+    // Build formula list: try both core and shivammathur for each version
+    let mut args: Vec<String> = vec!["info".into(), "--json=v2".into()];
+    for v in versions {
+        args.push(format!("php@{}", v));
+        args.push(format!("shivammathur/php/php@{}", v));
+    }
+
+    if let Ok(output) = std::process::Command::new("brew").args(&args).output() {
+        if output.status.success() {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&output.stdout)) {
+                if let Some(formulae) = json["formulae"].as_array() {
+                    for f in formulae {
+                        let name = f["name"].as_str().unwrap_or("");
+                        let ver = f["versions"]["stable"].as_str().unwrap_or("");
+                        if let Some(short) = name.split("php@").nth(1) {
+                            let short = short.split('/').last().unwrap_or(short);
+                            if !ver.is_empty() {
+                                map.entry(short.to_string()).or_insert_with(|| ver.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map
 }
 
 fn brew_exists(formula: &str) -> bool {
