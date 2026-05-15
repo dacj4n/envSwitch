@@ -45,15 +45,10 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
         }
     }
 
-    // Per-version data dir, socket, port
     let data_dir = get_data_dir(module_name, version);
     let _ = std::fs::create_dir_all(&data_dir);
     let socket = data_dir.join("mysql.sock");
-
-    // Use version-specific port to avoid conflicts (3306 + version offset)
-    let ver_num: u16 = version.split('.').next()
-        .and_then(|s| s.parse().ok()).unwrap_or(0);
-    let port = if ver_num > 8 { 3307 } else { module.default_port.unwrap_or(3306) };
+    let port = module.default_port.unwrap_or(3306);
 
     eprintln!("Data dir: {}", data_dir.display());
     eprintln!("Socket:   {}", socket.display());
