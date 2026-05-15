@@ -117,21 +117,25 @@ impl MySqlProvider {
     }
 
     pub fn stop_service(_pid: u32) -> Result<(), String> {
-        // Try graceful shutdown via mysqladmin first
         eprintln!("Stopping MySQL...");
+        // Try mysqladmin via TCP
         let _ = Command::new("mysqladmin")
             .args(["-u", "root", "-h", "127.0.0.1", "shutdown"])
             .output();
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        // Check if still running
+        // Try brew services stop for any running mysql formula
+        for f in &["mysql", "mysql@8.0", "mysql@8.4"] {
+            let _ = Command::new("brew").args(["services", "stop", f]).output();
+        }
+
+        // Force kill any remaining mysqld
         if let Ok(output) = Command::new("pgrep").args(["-x", "mysqld"]).output() {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid_str in pids.lines() {
+            for pid_str in String::from_utf8_lossy(&output.stdout).lines() {
                 if let Ok(pid) = pid_str.trim().parse::<i32>() {
                     let _ = nix::sys::signal::kill(
                         nix::unistd::Pid::from_raw(pid),
-                        nix::sys::signal::Signal::SIGTERM,
+                        nix::sys::signal::Signal::SIGKILL,
                     );
                 }
             }
