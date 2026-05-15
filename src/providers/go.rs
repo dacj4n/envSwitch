@@ -17,6 +17,12 @@ pub struct GoAsset {
 
 impl GoProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
+        // Check cache (1 hour TTL)
+        let platform = Platform::current();
+        if let Some(cached) = read_remote_cache(&platform) {
+            return Ok(cached.into_iter().map(|v| RemoteVersion { version: v }).collect());
+        }
+
         let data = fetch_json()?;
         let current = Platform::current();
         let mut versions = Vec::new();
@@ -36,6 +42,11 @@ impl GoProvider {
         }
 
         if versions.is_empty() { return Err("No Go versions found".into()); }
+
+        // Cache the version strings
+        let version_strs: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
+        write_remote_cache(&platform, &version_strs);
+
         Ok(versions)
     }
 
@@ -119,4 +130,40 @@ fn fetch_json() -> Result<Vec<GoVersion>, String> {
     if !output.status.success() { return Err("Failed to fetch Go versions".into()); }
     let text = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))
+}
+
+// ── Cache (1 hour TTL) ───────────────────────────────────────────────
+
+fn cache_path(platform: &Platform) -> std::path::PathBuf {
+    crate::infra::fs::envswitch_home()
+        .join("cache")
+        .join(format!("go_remote_{}.json", platform.go_arch()))
+}
+
+fn read_remote_cache(platform: &Platform) -> Option<Vec<String>> {
+    let path = cache_path(platform);
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(elapsed) = modified.elapsed() {
+                if elapsed.as_secs() < 3600 {
+                    if let Ok(data) = std::fs::read_to_string(&path) {
+                        if let Ok(versions) = serde_json::from_str(&data) {
+                            return Some(versions);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn write_remote_cache(platform: &Platform, versions: &[String]) {
+    let path = cache_path(platform);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(data) = serde_json::to_string(versions) {
+        let _ = std::fs::write(&path, data);
+    }
 }
