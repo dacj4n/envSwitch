@@ -36,6 +36,14 @@ pub fn builtin_modules() -> Vec<Module> {
             path_entries: vec!["bin".into(), "sbin".into()],
             default_port: None,
         },
+        Module {
+            name: "python".into(),
+            display_name: "Python (via MacPorts)".into(),
+            category: ModuleCategory::Sdk,
+            env_vars: vec![("PYTHON_HOME".into(), "{install_path}".into())],
+            path_entries: vec!["bin".into()],
+            default_port: None,
+        },
     ]
 }
 

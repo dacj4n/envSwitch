@@ -169,6 +169,11 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
             let versions = providers::php::PhpProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v.version); }
         }
+        "python" => {
+            eprintln!("Python versions available via MacPorts:");
+            let versions = providers::python::PythonProvider::fetch_remote_versions()?;
+            for v in &versions { println!("  {}", v.version); }
+        }
         _ => return Err(format!("Unknown module: {}. Use 'envswitch list'.", module_name)),
     }
     Ok(())
