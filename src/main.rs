@@ -161,8 +161,9 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
             for v in &versions { println!("  {}", v); }
         }
         "mysql" => {
+            eprintln!("MySQL versions available via Homebrew:");
             let versions = providers::mysql::MySqlProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v); }
+            for v in &versions { println!("  {}", v.version); }
         }
         "php" => {
             eprintln!("PHP versions available via Homebrew:");

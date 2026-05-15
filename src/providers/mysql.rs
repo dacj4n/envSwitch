@@ -1,102 +1,102 @@
-use crate::domain::{ArchiveFormat, RunningService};
-use crate::infra::download;
-use crate::platform::Platform;
+//! MySQL provider — Homebrew for installation, envswitch for service management
+
+use crate::domain::{RemoteVersion, RunningService};
 use chrono::Utc;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::Command;
 
 pub struct MySqlProvider;
 
 impl MySqlProvider {
-    pub fn fetch_remote_versions() -> Result<Vec<String>, String> {
-        let platform = Platform::current();
-        let tag = platform.mysql_os_tag();
-        let mut versions = Vec::new();
+    pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
+        let output = std::process::Command::new("brew")
+            .args(["search", "mysql"])
+            .output()
+            .map_err(|_| "Homebrew not found".to_string())?;
 
-        // Probe CDN for available versions
-        // MySQL major versions: 9.x (Innovation), 8.4 (LTS), 8.0 (LTS)
-        // Limit probes: only latest patches to keep it fast
-        let probes: Vec<(&str, &[&str])> = vec![
-            ("9.1", &["0", "1"]),
-            ("9.0", &["0", "1"]),
-            ("8.4", &["0", "1", "2"]),
-            ("8.0", &["37", "38"]),
-        ];
+        let text = String::from_utf8_lossy(&output.stdout);
+        let mut versions = BTreeSet::new();
 
-        eprintln!("Probing MySQL CDN...");
-        for (major, patches) in &probes {
-            for patch in *patches {
-                let version = format!("{}.{}", major, patch);
-                let url = format!(
-                    "https://cdn.mysql.com/Downloads/MySQL-{}/mysql-{}-{}.tar.gz",
-                    major, version, tag
-                );
-                let output = std::process::Command::new("curl")
-                    .args([
-                        "-sIL", "-o", "/dev/null", "-w", "%{http_code}",
-                        "--connect-timeout", "2", "--max-time", "3",
-                        &url,
-                    ])
-                    .output()
-                    .map_err(|e| format!("curl failed: {}", e))?;
-
-                if String::from_utf8_lossy(&output.stdout).trim() == "200" {
-                    versions.push(version);
+        for line in text.lines() {
+            let line = line.trim();
+            if let Some(ver) = line.strip_prefix("mysql@") {
+                let ver = ver.split_whitespace().next().unwrap_or(ver);
+                if ver.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                    versions.insert(ver.to_string());
                 }
             }
         }
-
-        if versions.is_empty() {
-            return Err("No MySQL versions found for your platform. Try https://downloads.mysql.com/archives/community/".into());
+        // Also add latest mysql (no version suffix)
+        if text.lines().any(|l| l.trim() == "mysql") {
+            // Get actual version of `mysql` formula
+            if let Ok(v) = get_brew_version("mysql") {
+                versions.insert(v);
+            }
         }
 
-        // Sort newest first (simple string sort works for semver-like)
-        versions.sort_by(|a, b| b.cmp(a));
-        Ok(versions)
+        let mut sorted: Vec<RemoteVersion> = versions.into_iter()
+            .map(|v| RemoteVersion { version: v }).collect();
+        sorted.sort_by(|a, b| b.version.cmp(&a.version));
+
+        if sorted.is_empty() {
+            return Err("No MySQL versions found via Homebrew".into());
+        }
+        Ok(sorted)
     }
 
-    pub fn download_url(version: &str) -> Result<String, String> {
-        let platform = Platform::current();
-        let tag = platform.mysql_os_tag();
-        let ver_dir = Platform::mysql_version_dir(version);
+    pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
+        let formula = if version.starts_with("9.") || !version.contains('.') {
+            "mysql".to_string()
+        } else {
+            format!("mysql@{}", version)
+        };
 
-        // MySQL 5.7 is EOL, not available for direct download
-        if version.starts_with("5.") {
-            return Err(format!(
-                "MySQL {} is EOL and no longer available for direct download.\n\
-                 Download manually: https://downloads.mysql.com/archives/community/\n\
-                 Or use MySQL 8.0+: envswitch install mysql 8.0.37",
-                version
-            ));
+        eprintln!("Installing {} via Homebrew...", formula);
+        let status = Command::new("brew")
+            .args(["install", "--force", &formula])
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| format!("brew: {}", e))?;
+
+        if !status.success() {
+            eprintln!("brew link had conflicts (ignored)");
         }
 
-        // Use CDN URL (dev.mysql.com/get redirects to HTML page)
-        Ok(format!(
-            "https://cdn.mysql.com/Downloads/{}/mysql-{}-{}.tar.gz",
-            ver_dir, version, tag
-        ))
+        let actual = get_brew_version(&formula)?;
+
+        // Symlink Homebrew's bin
+        let output = Command::new("brew")
+            .args(["--prefix", &formula])
+            .output()
+            .map_err(|e| format!("brew --prefix: {}", e))?;
+
+        let brew_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let _ = std::fs::create_dir_all(dest);
+        let dest_bin = dest.join("bin");
+        let _ = std::fs::remove_dir_all(&dest_bin);
+        let _ = std::fs::remove_file(&dest_bin);
+
+        let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
+        std::os::unix::fs::symlink(&brew_bin, &dest_bin)
+            .map_err(|e| format!("symlink: {}", e))?;
+
+        eprintln!("MySQL {} linked from {}", actual, brew_path);
+        Ok(actual)
     }
 
-    pub fn install(archive: &Path, dest: &Path) -> Result<(), String> {
-        download::extract_archive(archive, dest, &ArchiveFormat::TarGz)
-    }
-
-    // ── Service Adapter ──────────────────────────────────────────────
+    // ── Service Adapter (works with Homebrew-installed mysqld) ────────
 
     pub fn init_data_dir(install_path: &Path, data_dir: &Path) -> Result<(), String> {
-        if data_dir.join("mysql").exists() {
-            return Ok(());
-        }
+        if data_dir.join("mysql").exists() { return Ok(()); }
         let mysqld = find_mysqld(install_path)?;
         let status = Command::new(&mysqld)
-            .args([
-                "--initialize-insecure",
-                &format!("--datadir={}", data_dir.display()),
-            ])
+            .args(["--initialize-insecure", &format!("--datadir={}", data_dir.display())])
             .output()
             .map_err(|e| format!("mysqld init failed: {}", e))?;
         if !status.status.success() {
-            return Err(format!("mysqld init failed: {}", String::from_utf8_lossy(&status.stderr)));
+            return Err(format!("mysqld init: {}", String::from_utf8_lossy(&status.stderr)));
         }
         Ok(())
     }
@@ -117,30 +117,20 @@ impl MySqlProvider {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
-            .map_err(|e| format!("Failed to start mysqld: {}", e))?;
+            .map_err(|e| format!("mysqld: {}", e))?;
 
         Ok(RunningService {
-            module_name: "mysql".into(),
-            version: String::new(),
-            pid: child.id(),
-            port,
-            started_at: Utc::now(),
+            module_name: "mysql".into(), version: String::new(),
+            pid: child.id(), port, started_at: Utc::now(),
         })
     }
 
     pub fn stop_service(pid: u32) -> Result<(), String> {
-        // Try graceful shutdown first
-        let _ = Command::new("mysqladmin")
-            .args(["-u", "root", "-h", "127.0.0.1", "shutdown"])
-            .output();
+        let _ = Command::new("mysqladmin").args(["-u", "root", "-h", "127.0.0.1", "shutdown"]).output();
         std::thread::sleep(std::time::Duration::from_secs(2));
-
-        // Fallback: SIGTERM
         if crate::infra::fs::read_pid_file("mysql").is_some() {
-            nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGTERM,
-            ).map_err(|e| format!("SIGTERM failed: {}", e))?;
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), nix::sys::signal::Signal::SIGTERM)
+                .map_err(|e| format!("SIGTERM: {}", e))?;
         }
         Ok(())
     }
@@ -148,12 +138,24 @@ impl MySqlProvider {
     pub fn read_logs(data_dir: &Path, lines: usize) -> Result<Vec<String>, String> {
         let log_file = data_dir.join("mysql.log");
         if !log_file.exists() { return Ok(vec!["(no log file)".into()]); }
-        let content = std::fs::read_to_string(&log_file)
-            .map_err(|e| format!("Cannot read log: {}", e))?;
-        let all_lines: Vec<&str> = content.lines().collect();
-        let start = if all_lines.len() > lines { all_lines.len() - lines } else { 0 };
-        Ok(all_lines[start..].iter().map(|s| s.to_string()).collect())
+        let content = std::fs::read_to_string(&log_file).map_err(|e| format!("read: {}", e))?;
+        let all: Vec<&str> = content.lines().collect();
+        let start = all.len().saturating_sub(lines);
+        Ok(all[start..].iter().map(|s| s.to_string()).collect())
     }
+}
+
+fn get_brew_version(formula: &str) -> Result<String, String> {
+    let output = Command::new("brew")
+        .args(["info", "--json=v2", formula])
+        .output()
+        .map_err(|e| format!("brew info: {}", e))?;
+    let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
+        .map_err(|_| "brew info parse error".to_string())?;
+    json["formulae"][0]["versions"]["stable"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "version not found".to_string())
 }
 
 fn find_mysqld(install_path: &Path) -> Result<std::path::PathBuf, String> {

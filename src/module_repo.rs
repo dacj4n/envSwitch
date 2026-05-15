@@ -22,7 +22,7 @@ pub fn builtin_modules() -> Vec<Module> {
         },
         Module {
             name: "mysql".into(),
-            display_name: "MySQL".into(),
+            display_name: "MySQL (via Homebrew)".into(),
             category: ModuleCategory::Service,
             env_vars: vec![("MYSQL_HOME".into(), "{install_path}".into())],
             path_entries: vec!["bin".into()],
