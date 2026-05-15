@@ -243,14 +243,28 @@ pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), St
     std::fs::remove_dir_all(&install_path)
         .map_err(|e| format!("Failed to remove {}: {}", install_path.display(), e))?;
 
+    // For Homebrew-based modules, also uninstall the formula
+    match module_name {
+        "mysql" | "php" | "python" => {
+            let formula = brew_formula(module_name, version);
+            eprintln!("Uninstalling {} via Homebrew...", formula);
+            let _ = std::process::Command::new("brew")
+                .args(["uninstall", "--force", "--ignore-dependencies", &formula])
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status();
+        }
+        _ => {}
+    }
+
     // Remove from metadata
     let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
     meta.versions.retain(|v| v.version != version);
     fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
 
-    // Purge data if requested
+    // Purge data if requested (per-version data dir)
     if purge {
-        let data_dir = fs::envswitch_home().join("data").join(module_name);
+        let data_dir = fs::envswitch_home().join("data").join(module_name).join(version);
         if data_dir.exists() {
             std::fs::remove_dir_all(&data_dir)
                 .map_err(|e| format!("Failed to remove data: {}", e))?;
@@ -302,6 +316,18 @@ pub fn list_installed(module_name: &str) -> Result<Vec<InstalledVersion>, String
 }
 
 /// List all installed versions across all modules by scanning the filesystem.
+fn brew_formula(module_name: &str, version: &str) -> String {
+    match module_name {
+        "mysql" => {
+            if version.starts_with("9.") { "mysql".into() }
+            else { format!("mysql@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")) }
+        }
+        "php" => format!("php@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")),
+        "python" => format!("python@{}", version),
+        _ => format!("{}@{}", module_name, version),
+    }
+}
+
 pub fn list_all_installed() -> Result<Vec<InstalledVersion>, String> {
     let mut all = Vec::new();
     for m in crate::module_repo::builtin_modules() {

@@ -78,11 +78,6 @@ impl PhpProvider {
         Ok(actual_version)
     }
 
-    /// Auto-detect already-installed Homebrew PHP and link it.
-    pub fn link_existing(version: &str, dest: &std::path::Path) -> Result<(), String> {
-        let formula = determine_formula(version)?;
-        link_brew_to_envswitch(&formula, dest)
-    }
 }
 
 fn determine_formula(version: &str) -> Result<String, String> {

@@ -74,6 +74,7 @@ impl Platform {
 
     // ── MySQL download naming ────────────────────────────────────────
 
+    #[allow(dead_code)]
     pub fn mysql_os_tag(&self) -> &str {
         match self {
             Platform::MacAarch64 => "macos14-arm64",
@@ -86,6 +87,7 @@ impl Platform {
     }
 
     /// Parse a user-provided version string and suggest the closest download.
+    #[allow(dead_code)]
     pub fn mysql_version_dir(version: &str) -> String {
         // MySQL version grouping: 8.0.x → mysql-8.0/
         let parts: Vec<&str> = version.split('.').collect();
