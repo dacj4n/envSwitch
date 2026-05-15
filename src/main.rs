@@ -283,10 +283,22 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     std::fs::write(&init_path, &init_script)
         .map_err(|e| format!("Cannot write init.sh: {}", e))?;
 
-    eprintln!("Shell integration written to {}", init_path.display());
-    eprintln!();
-    eprintln!("Add this ONE line to your ~/.zshrc:");
-    eprintln!();
-    println!("source {}", init_path.display());
+    // Create shims directory
+    let _ = std::fs::create_dir_all(infra::fs::envswitch_home().join("shims"));
+
+    // Auto-write source line to ~/.zshrc (idempotent — only once)
+    let home = dirs::home_dir().ok_or("Cannot find home dir")?;
+    let zshrc = home.join(".zshrc");
+    let source_line = format!("source {}", init_path.display());
+    let mut content = std::fs::read_to_string(&zshrc).unwrap_or_default();
+    if !content.contains(&source_line) {
+        content.push_str(&format!("\n# envSwitch\n{}\n", source_line));
+        std::fs::write(&zshrc, &content)
+            .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
+        eprintln!("Added source line to {}", zshrc.display());
+    } else {
+        eprintln!("Already configured in {}", zshrc.display());
+    }
+    eprintln!("Shell integration ready. Run: source ~/.zshrc");
     Ok(())
 }
