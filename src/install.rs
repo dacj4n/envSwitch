@@ -149,12 +149,47 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
         return Err("PHP source not found after extraction (no configure script)".into());
     }
 
-    eprintln!("Configuring PHP (CLI only)...");
+    eprintln!("Configuring PHP (dev build)...");
     let status = std::process::Command::new("./configure")
         .args([
             &format!("--prefix={}", path_str),
-            "--disable-all",
+            // Core
             "--enable-cli",
+            "--disable-cgi",
+            "--disable-phpdbg",
+            // Common extensions for web dev
+            "--enable-mbstring",
+            "--enable-xml",
+            "--enable-simplexml",
+            "--enable-dom",
+            "--enable-xmlreader",
+            "--enable-xmlwriter",
+            "--enable-ctype",
+            "--enable-fileinfo",
+            "--enable-filter",
+            "--enable-opcache",
+            "--enable-pcntl",
+            "--enable-phar",
+            "--enable-posix",
+            "--enable-session",
+            "--enable-tokenizer",
+            // Crypto
+            "--with-openssl",
+            // DB (build if system libs available)
+            "--enable-pdo",
+            "--with-pdo-mysql",
+            "--with-pdo-pgsql",
+            // Networking
+            "--with-curl",
+            // Compression
+            "--with-zlib",
+            // Misc
+            "--with-iconv",
+            "--enable-bcmath",
+            "--enable-calendar",
+            "--enable-exif",
+            "--enable-sockets",
+            // No PEAR
             "--without-pear",
         ])
         .current_dir(install_path)
