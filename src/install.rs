@@ -147,6 +147,8 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
         return Ok(());
     }
 
+    // Fix permissions on all scripts (tar may not preserve exec bits)
+    let _ = std::process::Command::new("chmod").args(["-R", "+x", "build", "configure", "config.status", "scripts"]).current_dir(install_path).status();
     let _ = std::process::Command::new("chmod").args(["+x", "configure"]).current_dir(install_path).status();
     let path_str = install_path.to_string_lossy();
     let jobs = std::thread::available_parallelism().map(|n| n.get().to_string()).unwrap_or("4".into());
@@ -173,7 +175,13 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
         .map_err(|e| format!("configure: {}", e))?;
 
     if !status.success() {
-        return Err("configure failed. Install build tools: xcode-select --install".into());
+        let os = std::env::consts::OS;
+        let hint = match os {
+            "macos" => "Install dependencies:\n  xcode-select --install\n  brew install libxml2 openssl curl zlib pkg-config bison re2c",
+            "linux" => "Install dependencies:\n  apt install -y build-essential libxml2-dev libssl-dev libcurl4-openssl-dev zlib1g-dev pkg-config bison re2c",
+            _ => "Install build tools and libraries (libxml2, openssl, curl, zlib)",
+        };
+        return Err(format!("configure failed.\n{}", hint));
     }
 
     eprintln!("Building PHP (make -j{})...", jobs);
