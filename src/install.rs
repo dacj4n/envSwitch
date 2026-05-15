@@ -154,7 +154,15 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
     let jobs = std::thread::available_parallelism().map(|n| n.get().to_string()).unwrap_or("4".into());
 
     eprintln!("Configuring PHP...");
-    let status = std::process::Command::new("./configure")
+    let mut cmd = std::process::Command::new("./configure");
+    // Set Homebrew pkg-config paths (macOS)
+    if cfg!(target_os = "macos") {
+        cmd.env("PKG_CONFIG_PATH", "/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/libxml2/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig:/opt/homebrew/opt/curl/lib/pkgconfig:/opt/homebrew/opt/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig");
+        // Set env vars for Homebrew keg-only libs
+        cmd.env("LIBXML_CFLAGS", "-I/opt/homebrew/opt/libxml2/include/libxml2")
+           .env("LIBXML_LIBS", "-L/opt/homebrew/opt/libxml2/lib -lxml2");
+    }
+    let status = cmd
         .args([
             &format!("--prefix={}", path_str),
             "--enable-cli", "--disable-cgi", "--disable-phpdbg",
