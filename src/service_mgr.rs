@@ -64,7 +64,17 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
             svc.version = version.to_string();
             fs::write_pid_file(module_name, svc.pid)
                 .map_err(|e| format!("Cannot write PID file: {}", e))?;
-
+            eprintln!("{} {} started (PID: {}, port: {})", module_name, version, svc.pid, svc.port);
+            Ok(svc)
+        }
+        "pgsql" => {
+            crate::providers::postgresql::PostgresqlProvider::init_data_dir(&install_path, &data_dir)?;
+            let mut svc = crate::providers::postgresql::PostgresqlProvider::start_service(
+                &install_path, &data_dir, port, &socket,
+            )?;
+            svc.version = version.to_string();
+            fs::write_pid_file(module_name, svc.pid)
+                .map_err(|e| format!("Cannot write PID file: {}", e))?;
             eprintln!("{} {} started (PID: {}, port: {})", module_name, version, svc.pid, svc.port);
             Ok(svc)
         }
@@ -85,6 +95,10 @@ pub fn stop(module_name: &str) -> Result<(), String> {
         "mysql" => {
             let pid = fs::read_pid_file(module_name).unwrap_or(0);
             crate::providers::mysql::MySqlProvider::stop_service(pid)?;
+        }
+        "pgsql" => {
+            let pid = fs::read_pid_file(module_name).unwrap_or(0);
+            crate::providers::postgresql::PostgresqlProvider::stop_service(pid)?;
         }
         _ => return Err(format!("No service adapter for: {}", module_name)),
     }
@@ -186,6 +200,7 @@ pub fn logs(module_name: &str, lines: usize) -> Result<Vec<String>, String> {
     let data_dir = get_data_dir(module_name, "latest");
     match module_name {
         "mysql" => crate::providers::mysql::MySqlProvider::read_logs(&data_dir, lines),
+        "pgsql" => crate::providers::postgresql::PostgresqlProvider::read_logs(&data_dir, lines),
         _ => Err(format!("No logs available for: {}", module_name)),
     }
 }

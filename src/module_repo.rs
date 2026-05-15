@@ -44,6 +44,14 @@ pub fn builtin_modules() -> Vec<Module> {
             path_entries: vec!["bin".into()],
             default_port: None,
         },
+        Module {
+            name: "pgsql".into(),
+            display_name: "PostgreSQL (via Homebrew)".into(),
+            category: ModuleCategory::Service,
+            env_vars: vec![("PGDATA".into(), "{data_path}".into())],
+            path_entries: vec!["bin".into()],
+            default_port: Some(5432),
+        },
     ]
 }
 

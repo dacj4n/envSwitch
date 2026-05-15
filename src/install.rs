@@ -64,6 +64,34 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             // Fix permissions: go.dev tarballs may not preserve exec bits
             fix_exec_permissions(&dest)?;
         }
+        "pgsql" => {
+            eprintln!("PostgreSQL uses Homebrew for installation.");
+            if dest.exists() && !force {
+                return Err(format!("pgsql {} is already installed. Use --force to reinstall.", version));
+            }
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            let actual_version = providers::postgresql::PostgresqlProvider::install(version, &dest)?;
+            let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
+            if actual_dest != dest {
+                let _ = std::fs::remove_dir_all(&actual_dest);
+                std::fs::rename(&dest, &actual_dest).map_err(|e| format!("rename: {}", e))?;
+                let size = fs::disk_usage(&actual_dest);
+                let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO: {}", e))?;
+                meta.versions.retain(|v| v.version != actual_version && v.version != version);
+                meta.versions.push(InstalledVersion {
+                    module_name: module_name.to_string(),
+                    version: actual_version.clone(),
+                    install_path: actual_dest,
+                    installed_at: Utc::now(),
+                    size_bytes: size,
+                });
+                fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
+                eprintln!("pgsql {} installed successfully.", actual_version);
+                return Ok(());
+            }
+        }
         "mysql" => {
             eprintln!("MySQL uses Homebrew for installation.");
             if dest.exists() && !force {
