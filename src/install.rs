@@ -158,10 +158,24 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
     // macOS Homebrew paths
     let brew = "/opt/homebrew/opt";
     if cfg!(target_os = "macos") {
-        cmd.env("PKG_CONFIG_PATH", format!("{}/lib/pkgconfig:{}/libxml2/lib/pkgconfig:{}/openssl@3/lib/pkgconfig:{}/curl/lib/pkgconfig:{}/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig", brew, brew, brew, brew, brew));
+        // Build pkg-config path dynamically from brew
+        let mut pkg_paths = vec![
+            format!("{}/lib/pkgconfig", brew),
+            format!("{}/zlib/lib/pkgconfig", brew),
+            "/usr/local/lib/pkgconfig".to_string(),
+        ];
+        // Add brew --prefix for each dep
+        for dep in &["libxml2", "openssl@3", "curl"] {
+            if let Ok(out) = std::process::Command::new("brew").args(["--prefix", dep]).output() {
+                let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !p.is_empty() {
+                    pkg_paths.push(format!("{}/lib/pkgconfig", p));
+                }
+            }
+        }
+        cmd.env("PKG_CONFIG_PATH", pkg_paths.join(":"));
         cmd.env("LIBXML_CFLAGS", format!("-I{}/libxml2/include/libxml2", brew))
            .env("LIBXML_LIBS", format!("-L{}/libxml2/lib -lxml2", brew))
-           // macOS built-in sqlite3 (headers via Xcode CLT)
            .env("SQLITE_CFLAGS", "-I/usr/include")
            .env("SQLITE_LIBS", "-L/usr/lib -lsqlite3");
     }
