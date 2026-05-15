@@ -14,8 +14,10 @@ struct PhpRelease {
 
 #[derive(Debug, Deserialize)]
 struct PhpSource {
+    #[serde(default)]
     #[allow(dead_code)]
     filename: String,
+    #[serde(default)]
     sha256: Option<String>,
 }
 
@@ -36,10 +38,13 @@ impl PhpProvider {
 
         let releases = fetch_releases()?;
         let mut versions: Vec<RemoteVersion> = releases
-            .keys()
-            .filter(|k| !k.contains("alpha") && !k.contains("beta") && !k.contains("RC"))
-            .cloned()
-            .map(|v| RemoteVersion { version: v })
+            .iter()
+            .filter(|(k, v)| {
+                if k.contains("alpha") || k.contains("beta") || k.contains("RC") { return false; }
+                // Must have at least one downloadable source
+                v.source.as_ref().map_or(false, |s| s.iter().any(|src| !src.filename.is_empty()))
+            })
+            .map(|(k, _)| RemoteVersion { version: k.clone() })
             .collect();
         versions.sort_by(|a, b| b.version.cmp(&a.version));
 
@@ -181,7 +186,7 @@ fn fetch_phpnet_source(version: &str) -> Result<PhpAsset, String> {
         .ok_or_else(|| format!("PHP {} not found", version))?;
 
     if let Some(sources) = &release.source {
-        if let Some(src) = sources.first() {
+        if let Some(src) = sources.iter().find(|s| !s.filename.is_empty()) {
             return Ok(PhpAsset {
                 download_url: format!("https://www.php.net/distributions/{}", src.filename),
                 checksum: src.sha256.clone().unwrap_or_default(),
@@ -194,15 +199,28 @@ fn fetch_phpnet_source(version: &str) -> Result<PhpAsset, String> {
 }
 
 fn fetch_releases() -> Result<HashMap<String, PhpRelease>, String> {
-    let output = std::process::Command::new("curl")
-        .args(["-sL", "https://www.php.net/releases/index.php?json&version=8&max=50"])
-        .output()
-        .map_err(|e| format!("curl: {}", e))?;
-    if !output.status.success() {
+    // Query each major version: 3, 4, 5, 7, 8 (6 was never released)
+    let mut all = HashMap::new();
+    for major in &["3", "4", "5", "7", "8"] {
+        let url = format!(
+            "https://www.php.net/releases/index.php?json&version={}&max=200",
+            major
+        );
+        let output = std::process::Command::new("curl")
+            .args(["-sL", &url])
+            .output()
+            .map_err(|e| format!("curl: {}", e))?;
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            if let Ok(releases) = serde_json::from_str::<HashMap<String, PhpRelease>>(&text) {
+                all.extend(releases);
+            }
+        }
+    }
+    if all.is_empty() {
         return Err("Failed to fetch PHP releases".into());
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(&text).map_err(|e| format!("PHP API error: {}", e))
+    Ok(all)
 }
 
 // ── Cache ────────────────────────────────────────────────────────────
