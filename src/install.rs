@@ -76,6 +76,20 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             }
             providers::mysql::MySqlProvider::install(&archive, &dest)?;
         }
+        "php" => {
+            let asset = providers::php::PhpProvider::fetch_asset(version)?;
+            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            if !asset.checksum.is_empty() {
+                eprintln!("Verifying SHA256...");
+                download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            }
+            eprintln!("Extracting...");
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            providers::php::PhpProvider::install(&archive, &dest)?;
+            fix_exec_permissions(&dest)?;
+        }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
 

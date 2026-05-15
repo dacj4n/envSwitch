@@ -164,6 +164,11 @@ fn cmd_remote(module_name: &str, refresh: bool) -> Result<(), String> {
             let versions = providers::mysql::MySqlProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v); }
         }
+        "php" => {
+            eprintln!("Fetching PHP versions from php.net...");
+            let versions = providers::php::PhpProvider::fetch_remote_versions()?;
+            for v in &versions { println!("  {}", v.version); }
+        }
         _ => return Err(format!("Unknown module: {}. Use 'envswitch list'.", module_name)),
     }
     Ok(())

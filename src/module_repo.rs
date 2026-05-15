@@ -28,6 +28,14 @@ pub fn builtin_modules() -> Vec<Module> {
             path_entries: vec!["bin".into()],
             default_port: Some(3306),
         },
+        Module {
+            name: "php".into(),
+            display_name: "PHP".into(),
+            category: ModuleCategory::Sdk,
+            env_vars: vec![("PHP_HOME".into(), "{install_path}".into())],
+            path_entries: vec!["bin".into(), "sapi/cli".into()],
+            default_port: None,
+        },
     ]
 }
 
