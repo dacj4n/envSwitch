@@ -52,8 +52,8 @@ impl PhpProvider {
     }
 
     /// Install PHP via Homebrew and symlink into envswitch.
-    pub fn install(version: &str, dest: &std::path::Path) -> Result<(), String> {
-        // Determine formula name: check if it's from shivammathur tap or core
+    /// Returns the actual installed version (may differ from requested).
+    pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
         let formula = determine_formula(version)?;
 
         eprintln!("Installing {} via Homebrew...", formula);
@@ -64,13 +64,18 @@ impl PhpProvider {
             .status()
             .map_err(|e| format!("brew install: {}", e))?;
 
-        // brew link may fail for keg-only formulae — that's OK,
-        // envswitch uses its own symlinks to the Cellar
         if !status.success() {
             eprintln!("brew link had conflicts (ignored) — envswitch uses own symlinks");
         }
 
-        link_brew_to_envswitch(&formula, dest)
+        // Get actual installed version from brew
+        let actual_version = get_formula_version(&formula)?;
+        if actual_version != version {
+            eprintln!("Note: installed version is {} (requested {})", actual_version, version);
+        }
+
+        link_brew_to_envswitch(&formula, dest)?;
+        Ok(actual_version)
     }
 
     /// Auto-detect already-installed Homebrew PHP and link it.
@@ -137,6 +142,19 @@ fn batch_get_versions(versions: &BTreeSet<String>) -> std::collections::HashMap<
         }
     }
     map
+}
+
+fn get_formula_version(formula: &str) -> Result<String, String> {
+    let output = std::process::Command::new("brew")
+        .args(["info", "--json=v2", formula])
+        .output()
+        .map_err(|e| format!("brew info: {}", e))?;
+    let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
+        .map_err(|_| "brew info parse error".to_string())?;
+    json["formulae"][0]["versions"]["stable"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "version not found".to_string())
 }
 
 fn brew_exists(formula: &str) -> bool {

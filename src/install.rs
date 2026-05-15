@@ -85,7 +85,27 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            providers::php::PhpProvider::install(version, &dest)?;
+            let actual_version = providers::php::PhpProvider::install(version, &dest)?;
+            // Use actual version from brew for metadata
+            let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
+            if actual_dest != dest {
+                let _ = std::fs::remove_dir_all(&actual_dest);
+                std::fs::rename(&dest, &actual_dest).map_err(|e| format!("rename: {}", e))?;
+                // Record metadata with actual version
+                let size = fs::disk_usage(&actual_dest);
+                let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO: {}", e))?;
+                meta.versions.retain(|v| v.version != actual_version && v.version != version);
+                meta.versions.push(InstalledVersion {
+                    module_name: module_name.to_string(),
+                    version: actual_version.clone(),
+                    install_path: actual_dest,
+                    installed_at: Utc::now(),
+                    size_bytes: size,
+                });
+                fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
+                eprintln!("php {} installed successfully.", actual_version);
+                return Ok(());
+            }
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
