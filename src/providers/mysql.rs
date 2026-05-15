@@ -84,19 +84,17 @@ impl MySqlProvider {
         Ok(())
     }
 
-    pub fn start_service(install_path: &Path, data_dir: &Path, port: u16) -> Result<RunningService, String> {
+    pub fn start_service(install_path: &Path, data_dir: &Path, port: u16, socket: &Path) -> Result<RunningService, String> {
         let mysqld = find_mysqld(install_path)?;
         let log_file = data_dir.join("mysql.log");
         let pid_file = data_dir.join("mysql.pid");
-
-        // Get current user
         let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
 
         let child = Command::new(&mysqld)
             .args([
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),
-                &format!("--socket=/tmp/mysql.sock"),
+                &format!("--socket={}", socket.display()),
                 &format!("--log-error={}", log_file.display()),
                 &format!("--pid-file={}", pid_file.display()),
                 &format!("--user={}", user),

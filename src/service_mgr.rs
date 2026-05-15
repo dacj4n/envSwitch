@@ -45,16 +45,26 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
         }
     }
 
-    let data_dir = get_data_dir(module_name);
+    // Per-version data dir, socket, port
+    let data_dir = get_data_dir(module_name, version);
     let _ = std::fs::create_dir_all(&data_dir);
+    let socket = data_dir.join("mysql.sock");
+
+    // Use version-specific port to avoid conflicts (3306 + version offset)
+    let ver_num: u16 = version.split('.').next()
+        .and_then(|s| s.parse().ok()).unwrap_or(0);
+    let port = if ver_num > 8 { 3307 } else { module.default_port.unwrap_or(3306) };
+
     eprintln!("Data dir: {}", data_dir.display());
+    eprintln!("Socket:   {}", socket.display());
+    eprintln!("Port:     {}", port);
 
     // Dispatch to adapter
     match module_name {
         "mysql" => {
             crate::providers::mysql::MySqlProvider::init_data_dir(&install_path, &data_dir)?;
             let mut svc = crate::providers::mysql::MySqlProvider::start_service(
-                &install_path, &data_dir, port,
+                &install_path, &data_dir, port, &socket,
             )?;
             svc.version = version.to_string();
             fs::write_pid_file(module_name, svc.pid)
@@ -172,14 +182,13 @@ pub struct PortInfo {
 }
 
 /// Read service logs.
-fn get_data_dir(module_name: &str) -> std::path::PathBuf {
-    let brew_data = std::path::PathBuf::from("/opt/homebrew/var").join(module_name);
-    if brew_data.exists() { brew_data }
-    else { fs::envswitch_home().join("data").join(module_name) }
+fn get_data_dir(module_name: &str, version: &str) -> std::path::PathBuf {
+    fs::envswitch_home().join("data").join(module_name).join(version)
 }
 
 pub fn logs(module_name: &str, lines: usize) -> Result<Vec<String>, String> {
-    let data_dir = get_data_dir(module_name);
+    // Use most recent version's data dir
+    let data_dir = get_data_dir(module_name, "latest");
     match module_name {
         "mysql" => crate::providers::mysql::MySqlProvider::read_logs(&data_dir, lines),
         _ => Err(format!("No logs available for: {}", module_name)),
