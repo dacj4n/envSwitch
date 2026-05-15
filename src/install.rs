@@ -88,8 +88,9 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
             providers::php::PhpProvider::install(&archive, &dest)?;
-            // Build PHP from source (only CLI, ~30s-2min)
-            build_php(&dest)?;
+            if !asset.is_prebuilt {
+                build_php(&dest)?;
+            }
             fix_exec_permissions(&dest)?;
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
