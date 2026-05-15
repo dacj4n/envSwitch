@@ -52,42 +52,13 @@ impl MySqlProvider {
             format!("mysql@{}", version)
         };
 
-        eprintln!("Installing {} via Homebrew...", formula);
-        let status = Command::new("brew")
-            .args(["install", "--force", &formula])
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| format!("brew: {}", e))?;
-
-        if !status.success() {
-            eprintln!("brew link had conflicts (ignored)");
-        }
-
-        let actual = get_brew_version(&formula)?;
-
-        // Symlink Homebrew's bin
-        let output = Command::new("brew")
-            .args(["--prefix", &formula])
-            .output()
-            .map_err(|e| format!("brew --prefix: {}", e))?;
-
-        let brew_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        crate::providers::homebrew::brew_ensure(&formula)?;
+        let actual = crate::providers::homebrew::brew_version(&formula)?;
+        let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
         let _ = std::fs::create_dir_all(dest);
-        let dest_bin = dest.join("bin");
-        let _ = std::fs::remove_dir_all(&dest_bin);
-        let _ = std::fs::remove_file(&dest_bin);
 
-        // Symlink bin, lib, share from Homebrew (all needed for mysqld to run)
         for dir in &["bin", "lib", "share"] {
-            let src = std::path::PathBuf::from(&brew_path).join(dir);
-            if src.exists() {
-                let dst = dest.join(dir);
-                let _ = std::fs::remove_dir_all(&dst);
-                let _ = std::fs::remove_file(&dst);
-                std::os::unix::fs::symlink(&src, &dst)
-                    .map_err(|e| format!("symlink {}: {}", dir, e))?;
-            }
+            crate::providers::homebrew::brew_symlink_dir(&brew_path, dest, dir)?;
         }
 
         eprintln!("MySQL {} linked from {}", actual, brew_path);
@@ -173,6 +144,39 @@ impl MySqlProvider {
         let start = all.len().saturating_sub(lines);
         Ok(all[start..].iter().map(|s| s.to_string()).collect())
     }
+}
+
+/// Run brew install only if formula is not already installed.
+fn brew_ensure(formula: &str) -> Result<(), String> {
+    let check = Command::new("brew").args(["--prefix", formula]).output();
+    if check.map_or(false, |o| o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty()) {
+        eprintln!("{} already installed, linking...", formula);
+        return Ok(());
+    }
+    eprintln!("Installing {} via Homebrew...", formula);
+    let status = Command::new("brew").args(["install", formula])
+        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
+        .status().map_err(|e| format!("brew: {}", e))?;
+    if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+    Ok(())
+}
+
+fn get_brew_prefix(formula: &str) -> Result<String, String> {
+    let output = Command::new("brew").args(["--prefix", formula]).output()
+        .map_err(|e| format!("brew --prefix: {}", e))?;
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn brew_symlink(brew_path: &str, dest: &std::path::Path, dir: &str) -> Result<(), String> {
+    let src = std::path::PathBuf::from(brew_path).join(dir);
+    if src.exists() {
+        let dst = dest.join(dir);
+        let _ = std::fs::remove_dir_all(&dst);
+        let _ = std::fs::remove_file(&dst);
+        std::os::unix::fs::symlink(&src, &dst)
+            .map_err(|e| format!("symlink {}: {}", dir, e))?;
+    }
+    Ok(())
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
