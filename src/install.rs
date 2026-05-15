@@ -88,6 +88,8 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
             providers::php::PhpProvider::install(&archive, &dest)?;
+            // Build PHP from source (only CLI, ~30s-2min)
+            build_php(&dest)?;
             fix_exec_permissions(&dest)?;
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
@@ -138,6 +140,66 @@ fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
 }
 
 /// Find the effective JDK home: if a .jdk bundle exists, use Contents/Home inside it.
+/// Build PHP from source: configure + make + make install (CLI only, fast).
+fn build_php(install_path: &std::path::Path) -> Result<(), String> {
+    let path_str = install_path.to_string_lossy();
+
+    // Check if source files exist (configure script)
+    if !install_path.join("configure").exists() {
+        return Err("PHP source not found after extraction (no configure script)".into());
+    }
+
+    eprintln!("Configuring PHP (CLI only)...");
+    let status = std::process::Command::new("./configure")
+        .args([
+            &format!("--prefix={}", path_str),
+            "--disable-all",
+            "--enable-cli",
+            "--without-pear",
+        ])
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| format!("configure failed: {}", e))?;
+
+    if !status.success() {
+        return Err("PHP configure failed. Check that build tools are installed (Xcode CLI tools)".into());
+    }
+
+    let jobs = std::thread::available_parallelism()
+        .map(|n| n.get().to_string())
+        .unwrap_or("4".into());
+    eprintln!("Building PHP (make -j{})...", jobs);
+    let status = std::process::Command::new("make")
+        .args(["-j", &jobs])
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| format!("make failed: {}", e))?;
+
+    if !status.success() {
+        return Err("PHP build failed".into());
+    }
+
+    eprintln!("Installing PHP...");
+    let status = std::process::Command::new("make")
+        .arg("install")
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| format!("make install failed: {}", e))?;
+
+    if !status.success() {
+        return Err("PHP install failed".into());
+    }
+
+    eprintln!("PHP built and installed successfully.");
+    Ok(())
+}
+
 pub fn find_jdk_home(install_path: &std::path::Path) -> std::path::PathBuf {
     // Look for .jdk bundle directories
     if let Ok(entries) = std::fs::read_dir(install_path) {
