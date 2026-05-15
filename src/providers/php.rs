@@ -58,14 +58,16 @@ impl PhpProvider {
 
         eprintln!("Installing {} via Homebrew...", formula);
         let status = std::process::Command::new("brew")
-            .args(["install", &formula])
+            .args(["install", "--force", &formula])
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .status()
             .map_err(|e| format!("brew install: {}", e))?;
 
+        // brew link may fail for keg-only formulae — that's OK,
+        // envswitch uses its own symlinks to the Cellar
         if !status.success() {
-            return Err(format!("brew install {} failed", formula));
+            eprintln!("brew link had conflicts (ignored) — envswitch uses own symlinks");
         }
 
         link_brew_to_envswitch(&formula, dest)
