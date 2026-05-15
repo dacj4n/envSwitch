@@ -79,29 +79,29 @@ impl PhpProvider {
 }
 
 fn determine_formula(version: &str) -> Result<String, String> {
+    // Extract base major.minor from full version (7.0.33-zts → 7.0)
+    let base = version.split('.').take(2).collect::<Vec<_>>().join(".");
+
     // Check core formula first
-    let core = format!("php@{}", version);
+    let core = format!("php@{}", base);
     if brew_exists(&core) { return Ok(core); }
 
     // Check shivammathur tap
-    let tap = format!("shivammathur/php/php@{}", version);
+    let tap = format!("shivammathur/php/php@{}", base);
     if brew_exists(&tap) { return Ok(tap); }
 
-    // Search brew to find which tap has this version
-    let search = std::process::Command::new("brew")
-        .args(["search", &format!("/php@{}", version)])
-        .output()
-        .map_err(|_| "Homebrew not found".to_string())?;
-
-    let text = String::from_utf8_lossy(&search.stdout);
-    for line in text.lines() {
-        let line = line.trim();
-        if line.contains(&format!("php@{}", version)) && !line.contains('-') {
-            return Ok(line.to_string());
-        }
+    // Build full version string with variant: 7.0.33-zts
+    // Check if the full version (with variant suffix) matches a formula
+    if version != base && version.contains('-') {
+        let variant = version.splitn(2, '-').nth(1).unwrap_or("");
+        let core_var = format!("php@{}-{}", base, variant);
+        if brew_exists(&core_var) { return Ok(core_var); }
+        let tap_var = format!("shivammathur/php/php@{}-{}", base, variant);
+        if brew_exists(&tap_var) { return Ok(tap_var); }
     }
 
-    // Default: try core formula
+    // Default: use the tap (shivammathur for old versions)
+    if brew_exists(&tap) { return Ok(tap); }
     Ok(core)
 }
 
