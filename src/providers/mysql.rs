@@ -78,9 +78,17 @@ impl MySqlProvider {
         let _ = std::fs::remove_dir_all(&dest_bin);
         let _ = std::fs::remove_file(&dest_bin);
 
-        let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-        std::os::unix::fs::symlink(&brew_bin, &dest_bin)
-            .map_err(|e| format!("symlink: {}", e))?;
+        // Symlink bin, lib, share from Homebrew (all needed for mysqld to run)
+        for dir in &["bin", "lib", "share"] {
+            let src = std::path::PathBuf::from(&brew_path).join(dir);
+            if src.exists() {
+                let dst = dest.join(dir);
+                let _ = std::fs::remove_dir_all(&dst);
+                let _ = std::fs::remove_file(&dst);
+                std::os::unix::fs::symlink(&src, &dst)
+                    .map_err(|e| format!("symlink {}: {}", dir, e))?;
+            }
+        }
 
         eprintln!("MySQL {} linked from {}", actual, brew_path);
         Ok(actual)
@@ -89,7 +97,11 @@ impl MySqlProvider {
     // ── Service Adapter (works with Homebrew-installed mysqld) ────────
 
     pub fn init_data_dir(install_path: &Path, data_dir: &Path) -> Result<(), String> {
-        if data_dir.join("mysql").exists() { return Ok(()); }
+        // Already initialized if mysql system tables exist
+        if data_dir.join("mysql").exists() || data_dir.join("ibdata1").exists() {
+            return Ok(());
+        }
+        eprintln!("Initializing MySQL data directory...");
         let mysqld = find_mysqld(install_path)?;
         let status = Command::new(&mysqld)
             .args(["--initialize-insecure", &format!("--datadir={}", data_dir.display())])
@@ -106,13 +118,18 @@ impl MySqlProvider {
         let log_file = data_dir.join("mysql.log");
         let pid_file = data_dir.join("mysql.pid");
 
+        // Get current user
+        let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
+
         let child = Command::new(&mysqld)
             .args([
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),
-                &format!("--socket={}", data_dir.join("mysql.sock").display()),
+                &format!("--socket=/tmp/mysql.sock"),
                 &format!("--log-error={}", log_file.display()),
                 &format!("--pid-file={}", pid_file.display()),
+                &format!("--user={}", user),
+                &format!("--basedir={}", install_path.display()),
             ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
