@@ -150,6 +150,11 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
     }
 
     eprintln!("Configuring PHP (dev build)...");
+    // Ensure configure is executable (tar extraction may not preserve mode)
+    let _ = std::process::Command::new("chmod")
+        .args(["+x", "configure"])
+        .current_dir(install_path)
+        .status();
     let status = std::process::Command::new("./configure")
         .args([
             &format!("--prefix={}", path_str),

@@ -14,6 +14,7 @@ pub enum ModuleCategory {
 pub enum ArchiveFormat {
     TarGz,
     TarXz,
+    TarBz2,
     Zip,
 }
 

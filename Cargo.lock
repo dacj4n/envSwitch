@@ -464,6 +464,7 @@ dependencies = [
 name = "envswitch"
 version = "0.1.0"
 dependencies = [
+ "bzip2",
  "chrono",
  "clap",
  "dirs",

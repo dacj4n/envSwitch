@@ -74,6 +74,8 @@ impl PhpProvider {
             crate::domain::ArchiveFormat::TarGz
         } else if name.ends_with(".tar.xz") {
             crate::domain::ArchiveFormat::TarXz
+        } else if name.ends_with(".tar.bz2") {
+            crate::domain::ArchiveFormat::TarBz2
         } else {
             crate::domain::ArchiveFormat::Zip
         };

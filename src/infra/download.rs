@@ -69,8 +69,8 @@ pub fn extract_archive(archive: &Path, dest: &Path, format: &crate::domain::Arch
     fs::create_dir_all(dest).map_err(|e| format!("Cannot create dest dir: {}", e))?;
 
     match format {
-        crate::domain::ArchiveFormat::TarGz | crate::domain::ArchiveFormat::TarXz => {
-            extract_tar(archive, dest)
+        crate::domain::ArchiveFormat::TarGz | crate::domain::ArchiveFormat::TarXz | crate::domain::ArchiveFormat::TarBz2 => {
+            extract_tar(archive, dest, format)
         }
         crate::domain::ArchiveFormat::Zip => {
             extract_zip(archive, dest)
@@ -78,16 +78,12 @@ pub fn extract_archive(archive: &Path, dest: &Path, format: &crate::domain::Arch
     }
 }
 
-fn extract_tar(archive: &Path, dest: &Path) -> Result<(), String> {
+fn extract_tar(archive: &Path, dest: &Path, format: &crate::domain::ArchiveFormat) -> Result<(), String> {
     let f = fs::File::open(archive).map_err(|e| format!("Cannot open archive: {}", e))?;
-    let decoder: Box<dyn io::Read> = {
-        let _ext = archive.extension().and_then(|s| s.to_str()).unwrap_or("");
-        let name = archive.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        if name.ends_with(".tar.xz") {
-            Box::new(xz2::read::XzDecoder::new(f))
-        } else {
-            Box::new(flate2::read::GzDecoder::new(f))
-        }
+    let decoder: Box<dyn io::Read> = match format {
+        crate::domain::ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(f)),
+        crate::domain::ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzDecoder::new(f)),
+        _ => Box::new(flate2::read::GzDecoder::new(f)),
     };
     let mut archive_reader = tar::Archive::new(decoder);
 
