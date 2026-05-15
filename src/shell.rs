@@ -7,7 +7,10 @@ pub fn render_init(binary_path: &str) -> String {
 
     format!(
         r##"# envSwitch shell integration
-# shims PATH (symlink-based, no eval needed for switching)
+# Idempotent guard — only source once
+if [ -n "$_ENVSWITCH_LOADED" ]; then return; fi
+_ENVSWITCH_LOADED=1
+
 export PATH="{}:$PATH"
 
 _ENVSWITCH_BIN="{}"
