@@ -88,7 +88,8 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
             providers::php::PhpProvider::install(&archive, &dest)?;
-            eprintln!("PHP {} source installed (needs compilation).", version);
+            build_php(&dest)?;
+            fix_exec_permissions(&dest)?;
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
@@ -138,6 +139,60 @@ fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
 }
 
 /// Find the effective JDK home: if a .jdk bundle exists, use Contents/Home inside it.
+
+/// Build PHP from source (dev config with common extensions).
+fn build_php(install_path: &std::path::Path) -> Result<(), String> {
+    if !install_path.join("configure").exists() {
+        eprintln!("PHP source (no configure) — skip build, needs manual compilation");
+        return Ok(());
+    }
+
+    let _ = std::process::Command::new("chmod").args(["+x", "configure"]).current_dir(install_path).status();
+    let path_str = install_path.to_string_lossy();
+    let jobs = std::thread::available_parallelism().map(|n| n.get().to_string()).unwrap_or("4".into());
+
+    eprintln!("Configuring PHP...");
+    let status = std::process::Command::new("./configure")
+        .args([
+            &format!("--prefix={}", path_str),
+            "--enable-cli", "--disable-cgi", "--disable-phpdbg",
+            "--enable-mbstring", "--enable-xml", "--enable-simplexml",
+            "--enable-dom", "--enable-xmlreader", "--enable-xmlwriter",
+            "--enable-ctype", "--enable-fileinfo", "--enable-filter",
+            "--enable-opcache", "--enable-pcntl", "--enable-phar",
+            "--enable-posix", "--enable-session", "--enable-tokenizer",
+            "--with-openssl", "--enable-pdo", "--with-pdo-mysql",
+            "--with-pdo-pgsql", "--with-curl", "--with-zlib",
+            "--with-iconv", "--enable-bcmath", "--enable-calendar",
+            "--enable-exif", "--enable-sockets", "--without-pear",
+        ])
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| format!("configure: {}", e))?;
+
+    if !status.success() {
+        return Err("configure failed. Install build tools: xcode-select --install".into());
+    }
+
+    eprintln!("Building PHP (make -j{})...", jobs);
+    let status = std::process::Command::new("make").args(["-j", &jobs])
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
+        .status().map_err(|e| format!("make: {}", e))?;
+    if !status.success() { return Err("make failed".into()); }
+
+    eprintln!("Installing...");
+    let status = std::process::Command::new("make").arg("install")
+        .current_dir(install_path)
+        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
+        .status().map_err(|e| format!("make install: {}", e))?;
+    if !status.success() { return Err("make install failed".into()); }
+
+    eprintln!("PHP build complete.");
+    Ok(())
+}
 
 pub fn find_jdk_home(install_path: &std::path::Path) -> std::path::PathBuf {
     // Look for .jdk bundle directories
