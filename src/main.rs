@@ -20,7 +20,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::List { module } => cmd_list(module),
-        Commands::Remote { module } => cmd_remote(&module),
+        Commands::Remote { module, refresh } => cmd_remote(&module, refresh),
         Commands::Install { module, version, force } => install::install(&module, &version, force),
         Commands::Uninstall { module, version, purge } => install::uninstall(&module, &version, purge),
         Commands::Cover { module, version, global } => {
@@ -129,7 +129,26 @@ fn cmd_list(module: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_remote(module_name: &str) -> Result<(), String> {
+fn cmd_remote(module_name: &str, refresh: bool) -> Result<(), String> {
+    if refresh {
+        // Clear cache for the module
+        let cache_dir = infra::fs::envswitch_home().join("cache");
+        let prefix = match module_name {
+            "go" => "go_remote",
+            "jdk" => "jdk_remote",
+            _ => module_name,
+        };
+        // Remove all matching cache files
+        if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with(prefix) {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
     match module_name {
         "go" => {
             eprintln!("Fetching Go versions from go.dev...");

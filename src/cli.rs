@@ -36,6 +36,9 @@ pub enum Commands {
     Remote {
         /// Module name
         module: String,
+        /// Force refresh, ignore cache
+        #[arg(long, short)]
+        refresh: bool,
     },
 
     /// Install a specific version of a module
