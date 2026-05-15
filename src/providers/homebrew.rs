@@ -1,7 +1,37 @@
-//! Shared Homebrew helpers for PHP, Python, MySQL providers.
+//! Shared Homebrew helpers for PHP, Python, MySQL, PostgreSQL providers.
+
+/// Check that brew is available. On Linux without brew, suggest Linuxbrew.
+pub fn check_brew() -> Result<(), String> {
+    let ok = std::process::Command::new("brew")
+        .arg("--version")
+        .output()
+        .map_or(false, |o| o.status.success());
+
+    if ok { return Ok(()); }
+
+    let msg = if cfg!(target_os = "linux") {
+        "\
+Homebrew is required for this module. Install Linuxbrew:
+
+  /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"
+
+Then add to your shell:
+
+  eval \"$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)\"
+
+Then retry."
+    } else {
+        "\
+Homebrew is required for this module. Install from:
+
+  https://brew.sh"
+    };
+    Err(msg.to_string())
+}
 
 /// Run brew install only if formula is not already installed.
 pub fn brew_ensure(formula: &str) -> Result<(), String> {
+    check_brew()?;
     if brew_installed(formula) {
         eprintln!("{} already installed, linking...", formula);
         return Ok(());
