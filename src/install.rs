@@ -88,10 +88,7 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
             providers::php::PhpProvider::install(&archive, &dest)?;
-            if !asset.is_prebuilt {
-                build_php(&dest)?;
-            }
-            fix_exec_permissions(&dest)?;
+            eprintln!("PHP {} source installed (needs compilation).", version);
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
@@ -141,122 +138,6 @@ fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
 }
 
 /// Find the effective JDK home: if a .jdk bundle exists, use Contents/Home inside it.
-/// Build PHP from source: configure + make + make install (CLI only, fast).
-fn build_php(install_path: &std::path::Path) -> Result<(), String> {
-    let path_str = install_path.to_string_lossy();
-
-    // Generate configure if needed (shivammathur source doesn't ship with it)
-    if !install_path.join("configure").exists() {
-        if install_path.join("buildconf").exists() {
-            eprintln!("Generating configure script (buildconf)...");
-            let _ = std::process::Command::new("chmod")
-                .args(["+x", "buildconf"])
-                .current_dir(install_path)
-                .status();
-            let status = std::process::Command::new("./buildconf")
-                .arg("--force")
-                .current_dir(install_path)
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-                .map_err(|e| format!("buildconf failed: {}. Install autoconf, pkgconf, re2c.", e))?;
-            if !status.success() {
-                return Err("buildconf failed. Install build tools: brew install autoconf pkgconf re2c bison".into());
-            }
-        } else {
-            return Err("PHP source not found after extraction (no configure script)".into());
-        }
-    }
-
-    eprintln!("Configuring PHP (dev build)...");
-    let _ = std::process::Command::new("chmod")
-        .args(["+x", "configure"])
-        .current_dir(install_path)
-        .status();
-    let status = std::process::Command::new("./configure")
-        .args([
-            &format!("--prefix={}", path_str),
-            // Core
-            "--enable-cli",
-            "--disable-cgi",
-            "--disable-phpdbg",
-            // Common extensions for web dev
-            "--enable-mbstring",
-            "--enable-xml",
-            "--enable-simplexml",
-            "--enable-dom",
-            "--enable-xmlreader",
-            "--enable-xmlwriter",
-            "--enable-ctype",
-            "--enable-fileinfo",
-            "--enable-filter",
-            "--enable-opcache",
-            "--enable-pcntl",
-            "--enable-phar",
-            "--enable-posix",
-            "--enable-session",
-            "--enable-tokenizer",
-            // Crypto
-            "--with-openssl",
-            // DB (build if system libs available)
-            "--enable-pdo",
-            "--with-pdo-mysql",
-            "--with-pdo-pgsql",
-            // Networking
-            "--with-curl",
-            // Compression
-            "--with-zlib",
-            // Misc
-            "--with-iconv",
-            "--enable-bcmath",
-            "--enable-calendar",
-            "--enable-exif",
-            "--enable-sockets",
-            // No PEAR
-            "--without-pear",
-        ])
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| format!("configure failed: {}", e))?;
-
-    if !status.success() {
-        return Err("PHP configure failed. Check that build tools are installed (Xcode CLI tools)".into());
-    }
-
-    let jobs = std::thread::available_parallelism()
-        .map(|n| n.get().to_string())
-        .unwrap_or("4".into());
-    eprintln!("Building PHP (make -j{})...", jobs);
-    let status = std::process::Command::new("make")
-        .args(["-j", &jobs])
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| format!("make failed: {}", e))?;
-
-    if !status.success() {
-        return Err("PHP build failed".into());
-    }
-
-    eprintln!("Installing PHP...");
-    let status = std::process::Command::new("make")
-        .arg("install")
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| format!("make install failed: {}", e))?;
-
-    if !status.success() {
-        return Err("PHP install failed".into());
-    }
-
-    eprintln!("PHP built and installed successfully.");
-    Ok(())
-}
 
 pub fn find_jdk_home(install_path: &std::path::Path) -> std::path::PathBuf {
     // Look for .jdk bundle directories
