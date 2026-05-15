@@ -155,26 +155,30 @@ fn build_php(install_path: &std::path::Path) -> Result<(), String> {
 
     eprintln!("Configuring PHP...");
     let mut cmd = std::process::Command::new("./configure");
-    // Set Homebrew pkg-config paths (macOS)
+    // macOS Homebrew paths
+    let brew = "/opt/homebrew/opt";
     if cfg!(target_os = "macos") {
-        cmd.env("PKG_CONFIG_PATH", "/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/libxml2/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig:/opt/homebrew/opt/curl/lib/pkgconfig:/opt/homebrew/opt/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig");
-        // Set env vars for Homebrew keg-only libs
-        cmd.env("LIBXML_CFLAGS", "-I/opt/homebrew/opt/libxml2/include/libxml2")
-           .env("LIBXML_LIBS", "-L/opt/homebrew/opt/libxml2/lib -lxml2");
+        cmd.env("PKG_CONFIG_PATH", format!("{}/lib/pkgconfig:{}/libxml2/lib/pkgconfig:{}/openssl@3/lib/pkgconfig:{}/curl/lib/pkgconfig:{}/zlib/lib/pkgconfig:/usr/local/lib/pkgconfig", brew, brew, brew, brew, brew));
+        cmd.env("LIBXML_CFLAGS", format!("-I{}/libxml2/include/libxml2", brew))
+           .env("LIBXML_LIBS", format!("-L{}/libxml2/lib -lxml2", brew));
     }
     let status = cmd
         .args([
             &format!("--prefix={}", path_str),
             "--enable-cli", "--disable-cgi", "--disable-phpdbg",
+            // Core (zero extra deps)
             "--enable-mbstring", "--enable-xml", "--enable-simplexml",
             "--enable-dom", "--enable-xmlreader", "--enable-xmlwriter",
             "--enable-ctype", "--enable-fileinfo", "--enable-filter",
-            "--enable-opcache", "--enable-pcntl", "--enable-phar",
-            "--enable-posix", "--enable-session", "--enable-tokenizer",
-            "--with-openssl", "--enable-pdo", "--with-pdo-mysql",
-            "--with-pdo-pgsql", "--with-curl", "--with-zlib",
-            "--with-iconv", "--enable-bcmath", "--enable-calendar",
-            "--enable-exif", "--enable-sockets", "--without-pear",
+            "--enable-phar", "--enable-posix", "--enable-session",
+            "--enable-tokenizer", "--enable-opcache",
+            // Common (need external libs: openssl/curl/zlib)
+            "--with-openssl", "--with-curl", "--with-zlib",
+            // Database
+            "--enable-pdo", "--with-pdo-mysql",
+            // Minimal misc
+            "--enable-bcmath", "--enable-sockets",
+            "--without-pear",
         ])
         .current_dir(install_path)
         .stdout(std::process::Stdio::inherit())
