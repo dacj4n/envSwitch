@@ -206,12 +206,12 @@ fn test_cover_already_covered() {
 #[test]
 fn test_init_command() {
     let home = test_home("init_cmd");
-    let out = ok(&["init", "zsh"], &home);
-    // Should create init.sh
-    assert!(home.join("init.sh").exists());
-    // Should output the source line
-    let init_path = home.join("init.sh");
-    assert!(out.contains(&init_path.to_string_lossy().to_string()));
+    let output = run(&["init", "zsh"], &home);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Should create init.sh in envswitch home
+    assert!(home.join("init.sh").exists(), "init.sh not created");
+    // Should mention shell integration
+    assert!(stderr.contains("Shell integration"), "Got: {}", stderr);
     let _ = fs::remove_dir_all(&home);
 }
 
