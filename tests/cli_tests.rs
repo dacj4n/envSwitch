@@ -253,8 +253,8 @@ fn test_cover_to_uncover_all() {
     assert!(st.contains("jdk"));
     // uncover --all
     let out = ok(&["uncover", "--all"], &home);
-    // should restore to original PATH
-    assert!(out.contains("ENVSWITCH_SAVED_PATH"));
+    // should clear all env vars
+    assert!(out.contains("unset"));
     // status empty
     let st2 = ok(&["status"], &home);
     assert!(st2.contains("No active covers"));
