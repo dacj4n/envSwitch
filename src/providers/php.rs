@@ -57,12 +57,23 @@ impl PhpProvider {
     }
 
     pub fn fetch_asset(version: &str) -> Result<PhpAsset, String> {
-        // 1. For old PHP versions: shivammathur patched source (compiles on ARM64)
-        if let Ok(asset) = fetch_shivammathur_source(version) {
-            return Ok(asset);
+        let platform = Platform::current();
+        let is_arm64 = matches!(platform,
+            Platform::MacAarch64 | Platform::LinuxAarch64 | Platform::WindowsAarch64);
+        let is_old = {
+            let parts: Vec<u32> = version.split('.').filter_map(|s| s.parse().ok()).collect();
+            parts.first().map_or(true, |&m| m < 7)
+                || (parts.first() == Some(&7) && parts.get(1).map_or(true, |&m| m < 4))
+        };
+
+        // ARM64 + old PHP (pre-7.4): need shivammathur patched source
+        if is_arm64 && is_old {
+            if let Ok(asset) = fetch_shivammathur_source(version) {
+                return Ok(asset);
+            }
         }
 
-        // 2. Fallback: php.net source
+        // x64 or new PHP: php.net source compiles natively
         fetch_phpnet_source(version)
     }
 
