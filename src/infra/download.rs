@@ -57,27 +57,6 @@ pub fn verify_checksum(path: &Path, checksum_type: &ChecksumType, expected_sha25
     }
 }
 
-/// Fetch SHA256 checksum string from a checksum URL.
-pub fn fetch_checksum(checksum_url: &str) -> Result<String, String> {
-    let output = std::process::Command::new("curl")
-        .args(["-sL", checksum_url])
-        .output()
-        .map_err(|e| format!("curl failed: {}", e))?;
-
-    if !output.status.success() {
-        return Err("Failed to fetch checksum".into());
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout).to_string();
-    // SHA256 files usually contain: "<hash>  <filename>" or just "<hash>"
-    // Return just the first word (the hash)
-    let hash = text.split_whitespace().next().unwrap_or("").to_string();
-    if hash.len() != 64 {
-        return Err(format!("Invalid checksum format: '{}'", hash));
-    }
-    Ok(hash)
-}
-
 fn sha256_digest(data: &[u8]) -> String {
     use sha2::{Sha256, digest::Digest};
     let mut hasher = Sha256::new();

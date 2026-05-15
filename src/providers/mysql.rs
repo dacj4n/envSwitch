@@ -1,4 +1,4 @@
-use crate::domain::{ArchiveFormat, ChecksumType, RunningService};
+use crate::domain::{ArchiveFormat, RunningService};
 use crate::infra::download;
 use crate::platform::Platform;
 use chrono::Utc;
@@ -76,12 +76,6 @@ impl MySqlProvider {
             ver_dir, version, tag
         ))
     }
-
-    pub fn checksum_url(_version: &str) -> Option<String> { None }
-
-    pub fn archive_format() -> ArchiveFormat { ArchiveFormat::TarGz }
-
-    pub fn checksum_type() -> ChecksumType { ChecksumType::None }
 
     pub fn install(archive: &Path, dest: &Path) -> Result<(), String> {
         download::extract_archive(archive, dest, &ArchiveFormat::TarGz)

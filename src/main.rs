@@ -55,8 +55,8 @@ fn main() {
             }
         }
         Commands::Status => cmd_status(),
-        Commands::Export { module, version, global } => {
-            let scope = if global { CoverScope::Global } else { CoverScope::Session };
+        Commands::Export { module: _, version: _, global } => {
+            let _scope = if global { CoverScope::Global } else { CoverScope::Session };
             Err("export command is handled by shell function".into())
         },
         Commands::Start { module, version } => service_mgr::start(&module, &version).map(|_| ()),

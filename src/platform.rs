@@ -38,6 +38,7 @@ impl Platform {
 
     // ── Adoptium JDK API naming ─────────────────────────────────────
 
+    #[allow(dead_code)]
     pub fn adoptium_os(&self) -> &str {
         match self {
             Platform::MacAarch64 | Platform::MacX64 => "mac",
@@ -46,6 +47,7 @@ impl Platform {
         }
     }
 
+    #[allow(dead_code)]
     pub fn adoptium_arch(&self) -> &str {
         match self {
             Platform::MacX64 | Platform::LinuxX64 | Platform::WindowsX64 => "x64",

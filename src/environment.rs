@@ -17,7 +17,7 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
 
     // Check if same version already at top
     let mut stack = load_stack();
-    let already_covered = stack.iter().any(|c| c.module_name == module_name && c.version == version);
+    let _already_covered = stack.iter().any(|c| c.module_name == module_name && c.version == version);
     let is_top = stack.last().map_or(false, |c| c.module_name == module_name && c.version == version);
     if is_top {
         eprintln!("{} {} is already the current version.", module_name, version);

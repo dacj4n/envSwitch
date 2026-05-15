@@ -1,4 +1,4 @@
-use crate::domain::{CoverScope, ProjectConfig};
+use crate::domain::ProjectConfig;
 
 /// Load `.envswitchrc` from a directory.
 pub fn load_config(dir: &std::path::Path) -> Result<Option<ProjectConfig>, String> {
@@ -25,29 +25,6 @@ pub fn load_config(dir: &std::path::Path) -> Result<Option<ProjectConfig>, Strin
         }
     }
     Ok(Some(ProjectConfig { dependencies }))
-}
-
-/// Apply all dependencies to the cover stack, then return the full env script from the stack.
-pub fn compute_auto(config: &ProjectConfig, scope: &CoverScope) -> Result<String, String> {
-    if config.dependencies.is_empty() {
-        return Err("No dependencies in .envswitchrc. Edit the file to add some.".into());
-    }
-    for (module_name, version) in &config.dependencies {
-        let module = crate::module_repo::find_module(module_name);
-        match module {
-            Some(m) if m.category == crate::domain::ModuleCategory::Service => {
-                if let Err(e) = crate::service_mgr::start(module_name, version) {
-                    eprintln!("Warning: failed to start {} {}: {}", module_name, version, e);
-                }
-            }
-            _ => {}
-        }
-        // Apply to stack
-        if let Err(e) = crate::environment::cover(module_name, version, scope.clone()) {
-            eprintln!("Warning: {} {} : {}", module_name, version, e);
-        }
-    }
-    Ok(crate::environment::render_env())
 }
 
 /// Create a template .envswitchrc file.

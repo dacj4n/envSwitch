@@ -5,7 +5,7 @@ use serde::Deserialize;
 struct GoFile { filename: String, sha256: String }
 
 #[derive(Debug, Deserialize)]
-struct GoVersion { version: String, stable: bool, files: Vec<GoFile> }
+struct GoVersion { version: String, files: Vec<GoFile> }
 
 pub struct GoProvider;
 
@@ -23,33 +23,15 @@ impl GoProvider {
 
         for v in &data {
             let ver_str = v.version.trim_start_matches("go").to_string();
-            let mut platforms: Vec<String> = Vec::new();
-            let mut seen = std::collections::HashSet::new();
-            let mut current_ok = false;
-
+            // Check if this version has a build for the current platform
+            let target_os = current.go_os();
+            let target_arch = current.go_arch();
             for f in &v.files {
-                if let Some(tag) = go_file_platform(&f.filename) {
-                    if seen.insert(tag.clone()) {
-                        platforms.push(tag.clone());
-                    }
-                    // Check if this file matches current platform
-                    if current.go_os() == "darwin" && tag.contains("macOS") && tag.contains(current.go_arch_name()) {
-                        current_ok = true;
-                    } else if current.go_os() == "linux" && tag.contains("Linux") && tag.contains(current.go_arch_name()) {
-                        current_ok = true;
-                    } else if current.go_os() == "windows" && tag.contains("Windows") && tag.contains(current.go_arch_name()) {
-                        current_ok = true;
-                    }
+                if f.filename.contains(target_os) && f.filename.contains(target_arch)
+                    && f.filename.ends_with(".tar.gz") {
+                    versions.push(RemoteVersion { version: ver_str });
+                    break;
                 }
-            }
-
-            // Only show versions available for the current platform
-            if current_ok {
-                versions.push(RemoteVersion {
-                    version: ver_str,
-                    platforms: Vec::new(), // not displayed
-                    current_platform: true,
-                });
             }
         }
 
@@ -137,13 +119,4 @@ fn fetch_json() -> Result<Vec<GoVersion>, String> {
     if !output.status.success() { return Err("Failed to fetch Go versions".into()); }
     let text = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))
-}
-
-impl Platform {
-    fn go_arch_name(&self) -> &str {
-        match self {
-            Platform::MacAarch64 | Platform::LinuxAarch64 | Platform::WindowsAarch64 => "ARM64",
-            _ => "x64",
-        }
-    }
 }

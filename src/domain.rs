@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 // ── Enums ──────────────────────────────────────────────────────────
@@ -31,6 +30,7 @@ pub enum CoverScope {
 }
 
 impl CoverScope {
+    #[allow(dead_code)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "session" => Some(CoverScope::Session),
@@ -38,22 +38,6 @@ impl CoverScope {
             _ => None,
         }
     }
-}
-
-// ── Value Objects ───────────────────────────────────────────────────
-
-/// Environment change delta — the core output of cover/uncover.
-/// The CLI renders this to shell script; it never mutates env directly.
-#[derive(Debug, Clone, Default)]
-pub struct EnvDelta {
-    /// Variables to export: KEY=VALUE
-    pub exports: HashMap<String, String>,
-    /// Variables to unset
-    pub unset_vars: Vec<String>,
-    /// Paths to prepend to PATH
-    pub path_prepend: Vec<PathBuf>,
-    /// Paths to remove from PATH
-    pub path_remove: Vec<PathBuf>,
 }
 
 // ── Entities ────────────────────────────────────────────────────────
@@ -111,6 +95,7 @@ pub struct ProjectConfig {
 // ── Traits ──────────────────────────────────────────────────────────
 
 /// Strategy for downloading and installing a runtime.
+#[allow(dead_code)]
 pub trait RuntimeProvider {
     fn fetch_remote_versions(&self) -> Result<Vec<String>, String>;
     fn download_url(&self, version: &str) -> String;
@@ -120,6 +105,7 @@ pub trait RuntimeProvider {
 }
 
 /// Strategy for managing a service (MySQL, etc.) lifecycle.
+#[allow(dead_code)]
 pub trait ServiceAdapter {
     fn init_data_dir(&self, install_path: &Path, data_dir: &Path) -> Result<(), String>;
     fn start(&self, install_path: &Path, data_dir: &Path, port: u16)
@@ -131,11 +117,13 @@ pub trait ServiceAdapter {
 
 // ── State persistence types ─────────────────────────────────────────
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalState {
     pub covers: Vec<GlobalCoverEntry>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalCoverEntry {
     pub module_name: String,
@@ -152,8 +140,4 @@ pub struct InstalledMetadata {
 #[derive(Debug, Clone)]
 pub struct RemoteVersion {
     pub version: String,
-    /// Platform tags this version is available for, e.g. ["macOS ARM64", "macOS x64"]
-    pub platforms: Vec<String>,
-    /// Whether this version is available for the current platform
-    pub current_platform: bool,
 }

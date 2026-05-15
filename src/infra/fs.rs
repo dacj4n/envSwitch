@@ -1,4 +1,4 @@
-use crate::domain::{ActiveCover, CoverScope, GlobalCoverEntry, GlobalState, InstalledMetadata};
+use crate::domain::InstalledMetadata;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -48,51 +48,6 @@ fn metadata_path(module_name: &str) -> PathBuf {
     envswitch_home().join("envs").join(module_name).join("metadata.json")
 }
 
-// ── Global state (global covers) ────────────────────────────────────
-
-pub fn load_global_state() -> io::Result<GlobalState> {
-    let path = global_state_path();
-    if path.exists() {
-        let data = fs::read_to_string(&path)?;
-        Ok(serde_json::from_str(&data).unwrap_or(GlobalState { covers: vec![] }))
-    } else {
-        Ok(GlobalState { covers: vec![] })
-    }
-}
-
-pub fn save_global_state(state: &GlobalState) -> io::Result<()> {
-    let path = global_state_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let data = serde_json::to_string_pretty(state)?;
-    fs::write(&path, data)
-}
-
-fn global_state_path() -> PathBuf {
-    envswitch_home().join("state").join("global.json")
-}
-
-// ── Cover conversion ────────────────────────────────────────────────
-
-/// Convert a GlobalCoverEntry (from state file) to an ActiveCover.
-pub fn global_entry_to_cover(entry: &GlobalCoverEntry, install_path: &Path, env_vars: &[(String, String)], path_entries: &[String]) -> ActiveCover {
-    let mut injected_paths = Vec::new();
-    for pe in path_entries {
-        injected_paths.push(install_path.join(pe));
-    }
-    let injected_envs: Vec<String> = env_vars.iter().map(|(k, _)| k.clone()).collect();
-
-    ActiveCover {
-        module_name: entry.module_name.clone(),
-        version: entry.version.clone(),
-        scope: CoverScope::Global,
-        injected_paths,
-        injected_envs,
-        applied_at: entry.applied_at,
-    }
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 pub fn disk_usage(path: &Path) -> u64 {
@@ -114,15 +69,6 @@ pub fn disk_usage(path: &Path) -> u64 {
         }
     }
     dir_size(path)
-}
-
-pub fn available_disk(path: &Path) -> u64 {
-    // Simplified: just check if we can write
-    if let Ok(m) = fs::metadata(path) {
-        m.len() // not ideal but works as crude check; real impl uses sysinfo
-    } else {
-        0
-    }
 }
 
 /// Write PID to ~/.envswitch/run/<module>.pid

@@ -13,7 +13,6 @@ struct AzulPackage {
     name: String,
     download_url: String,
     java_version: Vec<u32>,
-    distro_version: Vec<u32>,
     #[serde(default)]
     latest: bool,
 }
@@ -24,7 +23,6 @@ pub struct JdkAsset {
     pub download_url: String,
     pub checksum: String,
     pub filename: String,
-    pub archive_format: ArchiveFormat,
 }
 
 impl JdkProvider {
@@ -92,7 +90,6 @@ impl JdkProvider {
                 download_url: p.download_url.clone(),
                 checksum: String::new(), // Azul API doesn't provide checksums
                 filename: p.name.clone(),
-                archive_format: if p.name.ends_with(".zip") { ArchiveFormat::Zip } else { ArchiveFormat::TarGz },
             });
         }
 
