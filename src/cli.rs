@@ -12,10 +12,10 @@ Switch between them instantly using shell eval protocol.
 
 Examples:
   envswitch list                    List all supported modules
-  envswitch remote jdk              Show available JDK versions
+  envswitch search jdk              Show available JDK versions
   envswitch install jdk 21          Install JDK 21
-  eval "$(envswitch cover jdk 21)"  Activate JDK 21 in current shell
-  eval "$(envswitch uncover jdk)"   Deactivate JDK
+  envswitch cover jdk 21            Activate JDK 21
+  envswitch uncover jdk             Deactivate JDK
   envswitch start mysql 8.0         Start MySQL 8.0
   envswitch stop mysql              Stop MySQL
 "#)]
@@ -32,8 +32,8 @@ pub enum Commands {
         module: Option<String>,
     },
 
-    /// Show available remote versions for a module
-    Remote {
+    /// Search available versions (local or remote)
+    Search {
         /// Module name
         module: String,
         /// Force refresh, ignore cache
