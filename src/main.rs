@@ -299,15 +299,16 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
         .ok_or("Cannot find home dir")?;
     let zshrc = home.join(".zshrc");
     let source_line = format!("source {}", init_path.display());
-    let mut content = std::fs::read_to_string(&zshrc).unwrap_or_default();
-    if !content.contains(&source_line) {
-        content.push_str(&format!("\n# envSwitch\n{}\n", source_line));
-        std::fs::write(&zshrc, &content)
-            .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
-        eprintln!("Added source line to {}", zshrc.display());
-    } else {
-        eprintln!("Already configured in {}", zshrc.display());
-    }
+    let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
+    // Remove old envSwitch lines, then add at END (for PATH priority)
+    let clean: String = content.lines()
+        .filter(|l| !l.contains(&source_line) && !l.trim().eq("# envSwitch"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let new_content = format!("{}\n# envSwitch\n{}\n", clean.trim_end(), source_line);
+    std::fs::write(&zshrc, &new_content)
+        .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
+    eprintln!("Source line added to end of {}", zshrc.display());
     eprintln!("Shell integration ready. Run: source ~/.zshrc");
     Ok(())
 }
