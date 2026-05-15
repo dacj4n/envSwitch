@@ -4,6 +4,7 @@ use crate::providers;
 use chrono::Utc;
 use std::os::unix::fs::PermissionsExt;
 
+
 /// Install a specific version of a module.
 pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), String> {
     let _module = crate::module_repo::find_module(module_name)
@@ -77,19 +78,14 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             providers::mysql::MySqlProvider::install(&archive, &dest)?;
         }
         "php" => {
-            let asset = providers::php::PhpProvider::fetch_asset(version)?;
-            let archive = download::download_file(&asset.download_url, module_name, version)?;
-            if !asset.checksum.is_empty() {
-                eprintln!("Verifying SHA256...");
-                download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+            eprintln!("PHP uses Homebrew for installation.");
+            if dest.exists() && !force {
+                return Err(format!("php {} is already installed. Use --force to reinstall.", version));
             }
-            eprintln!("Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            providers::php::PhpProvider::install(&archive, &dest)?;
-            build_php(&dest)?;
-            fix_exec_permissions(&dest)?;
+            providers::php::PhpProvider::install(version, &dest)?;
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
@@ -140,96 +136,7 @@ fn fix_exec_permissions(install_path: &std::path::Path) -> Result<(), String> {
 
 /// Find the effective JDK home: if a .jdk bundle exists, use Contents/Home inside it.
 
-/// Build PHP from source (dev config with common extensions).
-fn build_php(install_path: &std::path::Path) -> Result<(), String> {
-    if !install_path.join("configure").exists() {
-        eprintln!("PHP source (no configure) — skip build, needs manual compilation");
-        return Ok(());
-    }
 
-    // Fix permissions on all scripts (tar may not preserve exec bits)
-    let _ = std::process::Command::new("chmod").args(["-R", "+x", "build", "configure", "config.status", "scripts"]).current_dir(install_path).status();
-    let _ = std::process::Command::new("chmod").args(["+x", "configure"]).current_dir(install_path).status();
-    let path_str = install_path.to_string_lossy();
-    let jobs = std::thread::available_parallelism().map(|n| n.get().to_string()).unwrap_or("4".into());
-
-    eprintln!("Configuring PHP...");
-    let mut cmd = std::process::Command::new("./configure");
-    // macOS Homebrew paths
-    let brew = "/opt/homebrew/opt";
-    if cfg!(target_os = "macos") {
-        // Build pkg-config path dynamically from brew
-        let mut pkg_paths = vec![
-            format!("{}/lib/pkgconfig", brew),
-            format!("{}/zlib/lib/pkgconfig", brew),
-            "/usr/local/lib/pkgconfig".to_string(),
-        ];
-        // Add brew --prefix for each dep
-        for dep in &["libxml2", "openssl@3", "curl"] {
-            if let Ok(out) = std::process::Command::new("brew").args(["--prefix", dep]).output() {
-                let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !p.is_empty() {
-                    pkg_paths.push(format!("{}/lib/pkgconfig", p));
-                }
-            }
-        }
-        cmd.env("PKG_CONFIG_PATH", pkg_paths.join(":"));
-        cmd.env("LIBXML_CFLAGS", format!("-I{}/libxml2/include/libxml2", brew))
-           .env("LIBXML_LIBS", format!("-L{}/libxml2/lib -lxml2", brew))
-           .env("SQLITE_CFLAGS", "-I/usr/include")
-           .env("SQLITE_LIBS", "-L/usr/lib -lsqlite3");
-    }
-    let status = cmd
-        .args([
-            &format!("--prefix={}", path_str),
-            "--enable-cli", "--disable-cgi", "--disable-phpdbg",
-            // Core (zero extra deps)
-            "--enable-mbstring", "--enable-xml", "--enable-simplexml",
-            "--enable-dom", "--enable-xmlreader", "--enable-xmlwriter",
-            "--enable-ctype", "--enable-fileinfo", "--enable-filter",
-            "--enable-phar", "--enable-posix", "--enable-session",
-            "--enable-tokenizer", "--enable-opcache",
-            // Common (need external libs: openssl/curl/zlib)
-            "--with-openssl", "--with-curl", "--with-zlib",
-            // Database
-            "--enable-pdo", "--with-pdo-mysql",
-            // Minimal misc
-            "--enable-bcmath", "--enable-sockets",
-            "--without-pear",
-        ])
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| format!("configure: {}", e))?;
-
-    if !status.success() {
-        let os = std::env::consts::OS;
-        let hint = match os {
-            "macos" => "Install dependencies:\n  xcode-select --install\n  brew install libxml2 openssl curl zlib pkg-config bison re2c",
-            "linux" => "Install dependencies:\n  apt install -y build-essential libxml2-dev libssl-dev libcurl4-openssl-dev zlib1g-dev pkg-config bison re2c",
-            _ => "Install build tools and libraries (libxml2, openssl, curl, zlib)",
-        };
-        return Err(format!("configure failed.\n{}", hint));
-    }
-
-    eprintln!("Building PHP (make -j{})...", jobs);
-    let status = std::process::Command::new("make").args(["-j", &jobs])
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
-        .status().map_err(|e| format!("make: {}", e))?;
-    if !status.success() { return Err("make failed".into()); }
-
-    eprintln!("Installing...");
-    let status = std::process::Command::new("make").arg("install")
-        .current_dir(install_path)
-        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
-        .status().map_err(|e| format!("make install: {}", e))?;
-    if !status.success() { return Err("make install failed".into()); }
-
-    eprintln!("PHP build complete.");
-    Ok(())
-}
 
 pub fn find_jdk_home(install_path: &std::path::Path) -> std::path::PathBuf {
     // Look for .jdk bundle directories

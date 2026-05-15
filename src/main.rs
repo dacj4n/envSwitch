@@ -165,7 +165,7 @@ fn cmd_remote(module_name: &str, refresh: bool) -> Result<(), String> {
             for v in &versions { println!("  {}", v); }
         }
         "php" => {
-            eprintln!("Fetching PHP versions from php.net...");
+            eprintln!("PHP versions available via Homebrew:");
             let versions = providers::php::PhpProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v.version); }
         }

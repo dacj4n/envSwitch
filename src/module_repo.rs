@@ -30,10 +30,10 @@ pub fn builtin_modules() -> Vec<Module> {
         },
         Module {
             name: "php".into(),
-            display_name: "PHP".into(),
+            display_name: "PHP (via Homebrew)".into(),
             category: ModuleCategory::Sdk,
             env_vars: vec![("PHP_HOME".into(), "{install_path}".into())],
-            path_entries: vec!["bin".into(), "sapi/cli".into()],
+            path_entries: vec!["bin".into(), "sbin".into()],
             default_port: None,
         },
     ]
