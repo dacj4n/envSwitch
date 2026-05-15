@@ -45,8 +45,9 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
         }
     }
 
-    let data_dir = fs::envswitch_home().join("data").join(module_name);
+    let data_dir = get_data_dir(module_name);
     let _ = std::fs::create_dir_all(&data_dir);
+    eprintln!("Data dir: {}", data_dir.display());
 
     // Dispatch to adapter
     match module_name {
@@ -178,8 +179,14 @@ pub struct PortInfo {
 }
 
 /// Read service logs.
+fn get_data_dir(module_name: &str) -> std::path::PathBuf {
+    let brew_data = std::path::PathBuf::from("/opt/homebrew/var").join(module_name);
+    if brew_data.exists() { brew_data }
+    else { fs::envswitch_home().join("data").join(module_name) }
+}
+
 pub fn logs(module_name: &str, lines: usize) -> Result<Vec<String>, String> {
-    let data_dir = fs::envswitch_home().join("data").join(module_name);
+    let data_dir = get_data_dir(module_name);
     match module_name {
         "mysql" => crate::providers::mysql::MySqlProvider::read_logs(&data_dir, lines),
         _ => Err(format!("No logs available for: {}", module_name)),
