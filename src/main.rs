@@ -31,9 +31,27 @@ fn main() {
             if all {
                 cmd_uncover_all()
             } else if let Some(m) = module {
-                cmd_uncover(&m)
+                if module_repo::find_module(&m).is_none() {
+                    Err(format!(
+                        "Unknown module: '{}'.\nUsage: envswitch uncover <module>   or   envswitch uncover --all",
+                        m
+                    ))
+                } else {
+                    cmd_uncover(&m)
+                }
             } else {
-                Err("Specify a module name or use --all to uncover all.".into())
+                let names: Vec<String> = environment::get_status().iter()
+                    .map(|c| c.module_name.clone()).collect();
+                if names.is_empty() {
+                    Err(format!(
+                        "No active covers.\nUsage: envswitch uncover <module>   or   envswitch uncover --all"
+                    ))
+                } else {
+                    Err(format!(
+                        "Specify a module to uncover.\nActive: {}\nUsage: envswitch uncover <module>   or   envswitch uncover --all",
+                        names.join(", ")
+                    ))
+                }
             }
         }
         Commands::Status => cmd_status(),

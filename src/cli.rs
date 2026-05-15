@@ -71,12 +71,12 @@ pub enum Commands {
         global: bool,
     },
 
-    /// Generate environment uncover script (use with eval)
+    /// Remove a module from environment cover stack (use with eval)
     Uncover {
-        /// Module name (omit with --all to uncover all)
+        /// Module name to uncover (e.g. jdk, go, mysql)
         module: Option<String>,
-        /// Uncover all active modules
-        #[arg(long)]
+        /// Uncover ALL active modules at once
+        #[arg(long, short)]
         all: bool,
     },
 
