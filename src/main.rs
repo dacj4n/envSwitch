@@ -170,7 +170,7 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
             for v in &versions { println!("  {}", v.version); }
         }
         "python" => {
-            eprintln!("Python versions available via MacPorts:");
+            eprintln!("Python versions available via Homebrew:");
             let versions = providers::python::PythonProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v.version); }
         }
