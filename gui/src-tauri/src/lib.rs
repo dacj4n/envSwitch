@@ -9,6 +9,8 @@ struct ModuleInfo {
     category: String,
     versions: Vec<String>,
     active_version: Option<String>,
+    source_paths: Vec<String>,
+    is_symlinked: Vec<bool>,
 }
 
 #[derive(Serialize)]
@@ -31,17 +33,37 @@ fn list_modules() -> Vec<ModuleInfo> {
             .find(|c| c.module_name == m.name)
             .map(|c| c.version.clone());
 
-        // Dedup: if "8.0.46" exists, remove "8.0" (shorter prefix duplicate)
+        // Dedup + check if symlink
         let mut deduped: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
-        deduped.sort_by(|a, b| b.len().cmp(&a.len())); // longest first
+        deduped.sort_by(|a, b| b.len().cmp(&a.len()));
         let mut keep: Vec<String> = Vec::new();
         for v in &deduped {
-            // Keep if no already-kept longer version has this as prefix ("8.0" is prefix of "8.0.46")
             if !keep.iter().any(|k| k.starts_with(v.as_str()) && k != v) {
                 keep.push(v.clone());
             }
         }
         keep.sort();
+
+        // Check which versions are symlinks (can't uninstall)
+        let is_symlinked: Vec<bool> = keep.iter().map(|ver| {
+            versions.iter()
+                .find(|iv| &iv.version == ver)
+                .map(|iv| iv.install_path.is_symlink())
+                .unwrap_or(false)
+        }).collect();
+
+        // Get source paths for symlinked installs
+        let source_paths: Vec<String> = keep.iter().map(|ver| {
+            versions.iter()
+                .find(|iv| &iv.version == ver)
+                .and_then(|iv| {
+                    if iv.install_path.is_symlink() {
+                        std::fs::read_link(&iv.install_path).ok()
+                            .map(|p| p.display().to_string())
+                    } else { None }
+                })
+                .unwrap_or_default()
+        }).collect();
 
         ModuleInfo {
             name: m.name.clone(),
@@ -49,6 +71,8 @@ fn list_modules() -> Vec<ModuleInfo> {
             category: format!("{:?}", m.category),
             versions: keep,
             active_version: active,
+            source_paths,
+            is_symlinked,
         }
     }).collect()
 }

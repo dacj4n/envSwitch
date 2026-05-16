@@ -11,6 +11,7 @@ import {
 interface ModuleInfo {
   name: string; display_name: string; category: string;
   versions: string[]; active_version: string | null;
+  source_paths: string[]; is_symlinked: boolean[];
 }
 
 const MODULE_COLORS: Record<string, string> = {
@@ -145,7 +146,7 @@ export default function VersionsPage() {
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
-                            ~/.envswitch/envs/{m.name}/{ver}
+                            {m.source_paths?.[idx] ? `→ ${m.source_paths[idx]}` : `~/.envswitch/envs/${m.name}/${ver}`}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -158,9 +159,11 @@ export default function VersionsPage() {
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
                             ><PlayIcon className="w-3 h-3" /> Cover</button>
                           )}
-                          <button onClick={() => doUninstall(m.name, ver)}
-                            className="flex items-center justify-center w-7 h-7 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive border border-transparent hover:border-destructive/30"
-                          ><Trash2Icon className="w-3.5 h-3.5" /></button>
+                          {!m.is_symlinked?.[idx] && (
+                            <button onClick={() => doUninstall(m.name, ver)}
+                              className="flex items-center justify-center w-7 h-7 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive border border-transparent hover:border-destructive/30"
+                            ><Trash2Icon className="w-3.5 h-3.5" /></button>
+                          )}
                         </div>
                       </div>
                     );
@@ -184,7 +187,7 @@ export default function VersionsPage() {
                     </div>
                     {results.length > 0 && (
                       <div className="max-h-64 overflow-y-auto">
-                        {results.slice(0, 60).map(ver => {
+                        {results.slice(0, 100).map(ver => {
                           if (installedSet.has(ver)) return null;
                           const busy = installing === `${m.name}:${ver}`;
                           return (
