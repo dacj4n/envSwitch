@@ -41,7 +41,7 @@ impl NodeProvider {
         Ok(format!("v{}", ver))
     }
 
-    /// Switch Node version: run fnm use + output fnm env for eval.
+    /// Switch Node version: run fnm use + output fnm env for immediate effect.
     pub fn cover_script(version: &str) -> Result<String, String> {
         let ver = version.trim_start_matches('v');
         // Tell fnm to switch
@@ -51,11 +51,11 @@ impl NodeProvider {
             .map_err(|e| format!("fnm use: {}", e))?;
         eprintln!("{}", String::from_utf8_lossy(&use_out.stdout).trim());
 
-        // Output fnm env for the shell function to eval
+        // Output fnm env + hash -r for immediate effect
         let env_out = Command::new("fnm")
             .arg("env")
             .output()
             .map_err(|e| format!("fnm env: {}", e))?;
-        Ok(String::from_utf8_lossy(&env_out.stdout).to_string())
+        Ok(format!("{}\nhash -r\n", String::from_utf8_lossy(&env_out.stdout)))
     }
 }
