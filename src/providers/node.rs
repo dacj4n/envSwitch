@@ -1,74 +1,61 @@
-//! Node.js provider — delegates to fnm (Fast Node Manager) for version management
+//! Node.js provider — delegates to fnm, no symlinks needed
 
 use crate::domain::RemoteVersion;
+use std::process::Command;
 
 pub struct NodeProvider;
 
 impl NodeProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let output = std::process::Command::new("fnm")
+        let output = Command::new("fnm")
             .args(["list-remote"])
             .output()
             .map_err(|_| "fnm not found. Install: brew install fnm".to_string())?;
 
-        let text = String::from_utf8_lossy(&output.stdout);
-        let mut versions: Vec<RemoteVersion> = text
+        let mut versions: Vec<RemoteVersion> = String::from_utf8_lossy(&output.stdout)
             .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.starts_with('v') && line.len() > 1 {
-                    Some(RemoteVersion { version: line.to_string() })
-                } else {
-                    None
-                }
+            .filter_map(|l| {
+                let l = l.trim();
+                if l.starts_with('v') && l.len() > 1 {
+                    Some(RemoteVersion { version: l.to_string() })
+                } else { None }
             })
             .collect();
-
         versions.sort_by(|a, b| b.version.cmp(&a.version));
-        if versions.is_empty() {
-            return Err("No Node.js versions found. Check fnm: fnm list-remote".into());
-        }
         Ok(versions)
     }
 
-    pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
-        let ver = if version.starts_with('v') { version.to_string() } else { format!("v{}", version) };
-
-        // Check if fnm already has this version
-        let fnm_versions_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".local/share/fnm/node-versions");
-        let fnm_dir = fnm_versions_dir.join(&ver).join("installation");
-
-        if !fnm_dir.exists() {
-            eprintln!("Installing Node {} via fnm...", ver);
-            let status = std::process::Command::new("fnm")
-                .args(["install", &ver.trim_start_matches('v')])
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .status()
-                .map_err(|e| format!("fnm install: {}", e))?;
-            if !status.success() {
-                return Err(format!("fnm install {} failed", ver));
-            }
-        } else {
-            eprintln!("Node {} already installed via fnm, linking...", ver);
+    /// Run fnm install for a version.
+    pub fn install(version: &str, _dest: &std::path::Path) -> Result<String, String> {
+        let ver = version.trim_start_matches('v');
+        eprintln!("Installing Node {} via fnm...", ver);
+        let status = Command::new("fnm")
+            .args(["install", ver])
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .map_err(|e| format!("fnm install: {}", e))?;
+        if !status.success() {
+            return Err(format!("fnm install {} failed", ver));
         }
+        Ok(format!("v{}", ver))
+    }
 
-        // Symlink fnm's installation into envswitch
-        let _ = std::fs::create_dir_all(dest);
-        for dir in &["bin"] {
-            let src = fnm_dir.join(dir);
-            if src.exists() {
-                let dst = dest.join(dir);
-                let _ = std::fs::remove_dir_all(&dst);
-                let _ = std::fs::remove_file(&dst);
-                std::os::unix::fs::symlink(&src, &dst)
-                    .map_err(|e| format!("symlink {}: {}", dir, e))?;
-            }
-        }
+    /// Switch Node version: run fnm use + output fnm env for eval.
+    pub fn cover_script(version: &str) -> Result<String, String> {
+        let ver = version.trim_start_matches('v');
+        // Tell fnm to switch
+        let use_out = Command::new("fnm")
+            .args(["use", ver])
+            .output()
+            .map_err(|e| format!("fnm use: {}", e))?;
+        eprintln!("{}", String::from_utf8_lossy(&use_out.stdout).trim());
 
-        eprintln!("Node {} linked", ver);
-        Ok(ver)
+        // Output fnm env for the shell function to eval
+        let env_out = Command::new("fnm")
+            .arg("env")
+            .output()
+            .map_err(|e| format!("fnm env: {}", e))?;
+        Ok(String::from_utf8_lossy(&env_out.stdout).to_string())
     }
 }

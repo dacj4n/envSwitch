@@ -198,8 +198,15 @@ fn cmd_cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), 
         CoverScope::Session => "session",
         CoverScope::Global => "global",
     };
+
+    // Node delegates to fnm
+    if module_name == "node" {
+        eprintln!("{} {} covered ({})", module_name, version, scope_str);
+        print!("{}", providers::node::NodeProvider::cover_script(version)?);
+        return Ok(());
+    }
+
     eprintln!("{} {} covered ({})", module_name, version, scope_str);
-    // Output the full rebuilt environment as shell script
     print!("{}", environment::cover(module_name, version, scope)?);
     Ok(())
 }
