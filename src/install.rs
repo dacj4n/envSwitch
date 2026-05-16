@@ -296,7 +296,7 @@ pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), St
 
     // For Homebrew-based modules, also uninstall the formula
     match module_name {
-        "mysql" | "php" | "python" => {
+        "mysql" | "pgsql" | "php" | "python" => {
             let formula = brew_formula(module_name, version);
             eprintln!("Uninstalling {} via Homebrew...", formula);
             let _ = std::process::Command::new("brew")
@@ -373,6 +373,7 @@ fn brew_formula(module_name: &str, version: &str) -> String {
             if version.starts_with("9.") { "mysql".into() }
             else { format!("mysql@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")) }
         }
+        "pgsql" => format!("postgresql@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")),
         "php" => format!("php@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")),
         "python" => format!("python@{}", version),
         _ => format!("{}@{}", module_name, version),
