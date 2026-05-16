@@ -10,7 +10,8 @@ pub struct MySqlProvider;
 
 impl MySqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let output = std::process::Command::new("brew")
+        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let output = std::process::Command::new(brew)
             .args(["search", "mysql"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;

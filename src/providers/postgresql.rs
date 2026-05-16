@@ -10,7 +10,8 @@ pub struct PostgresqlProvider;
 
 impl PostgresqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let output = Command::new("brew")
+        let brew_cmd = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let output = Command::new(brew_cmd)
             .args(["search", "postgresql"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
