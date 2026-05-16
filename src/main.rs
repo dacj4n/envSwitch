@@ -153,6 +153,11 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
     }
 
     match module_name {
+        "node" => {
+            eprintln!("Fetching Node versions via fnm...");
+            let versions = providers::node::NodeProvider::fetch_remote_versions()?;
+            for v in &versions { println!("  {}", v.version); }
+        }
         "go" => {
             eprintln!("Fetching Go versions from go.dev...");
             let versions = providers::go::GoProvider::fetch_remote_versions()?;

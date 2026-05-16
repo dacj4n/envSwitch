@@ -52,6 +52,14 @@ pub fn builtin_modules() -> Vec<Module> {
             path_entries: vec!["bin".into()],
             default_port: Some(5432),
         },
+        Module {
+            name: "node".into(),
+            display_name: "Node.js (via fnm)".into(),
+            category: ModuleCategory::Sdk,
+            env_vars: vec![("NODE_HOME".into(), "{install_path}".into())],
+            path_entries: vec!["bin".into()],
+            default_port: None,
+        },
     ]
 }
 
