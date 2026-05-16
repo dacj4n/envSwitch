@@ -31,11 +31,23 @@ fn list_modules() -> Vec<ModuleInfo> {
             .find(|c| c.module_name == m.name)
             .map(|c| c.version.clone());
 
+        // Dedup: if "8.0.46" exists, remove "8.0" (shorter prefix duplicate)
+        let mut deduped: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
+        deduped.sort_by(|a, b| b.len().cmp(&a.len())); // longest first
+        let mut keep: Vec<String> = Vec::new();
+        for v in &deduped {
+            // Keep if no already-kept longer version has this as prefix ("8.0" is prefix of "8.0.46")
+            if !keep.iter().any(|k| k.starts_with(v.as_str()) && k != v) {
+                keep.push(v.clone());
+            }
+        }
+        keep.sort();
+
         ModuleInfo {
             name: m.name.clone(),
             display_name: m.display_name.clone(),
             category: format!("{:?}", m.category),
-            versions: versions.iter().map(|v| v.version.clone()).collect(),
+            versions: keep,
             active_version: active,
         }
     }).collect()
