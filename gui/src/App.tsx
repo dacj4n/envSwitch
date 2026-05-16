@@ -12,7 +12,7 @@ import SettingsPage from './pages/Settings';
 const App = () => (
   <BrowserRouter>
     <Toaster position="bottom-right" theme="dark" />
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <div className="flex h-full w-full overflow-hidden bg-background">
       <Sidebar />
       <main className="flex-1 overflow-hidden flex flex-col bg-background">
         <Routes>
