@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-arm64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-x64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/envswitch release/envswitch-${{ matrix.name }}
+          cd release && tar czf envswitch-${{ matrix.name }}.tar.gz envswitch-${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: envswitch-${{ matrix.name }}
+          path: release/envswitch-${{ matrix.name }}.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - run: ls -R
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: "**/*.tar.gz"
