@@ -2,24 +2,19 @@
 
 # envSwitch
 
-Fast, lightweight development environment version manager for macOS and Linux.
-
-Switch between JDK, Go, PHP, Python, MySQL, PostgreSQL versions instantly — no Docker, no compilation, no junk in your shell config.
+Fast development environment version manager for macOS and Linux.  
+CLI + Desktop GUI (Tauri v2). Zero Docker, zero compilation.
 
 ```bash
 $ envswitch search jdk
-  21.0.11+10.0.LTS
-  17.0.19+10
-  8.0.492
+  21.0.11+10.0.LTS 17.0.19+10  8.0.492
 
 $ envswitch install jdk 21.0.11+10.0.LTS
-# downloads from Azul Zulu API, SHA256 verified
-
 $ envswitch cover jdk 21.0.11+10.0.LTS
-$ java -version  # JDK 21 ✓
+$ java -version  # OpenJDK 21 ✓
 
-$ envswitch uncover jdk
-$ java -version  # back to system default
+$ envswitch cover go 1.25.10
+$ go version     # Go 1.25.10 ✓
 ```
 
 ## Why envSwitch?
@@ -27,96 +22,150 @@ $ java -version  # back to system default
 | | envSwitch | Docker | NVM/pyenv | ServBay |
 |---|---|---|---|---|
 | **Speed** | Native binary | VM overhead | Shell scripts | Native |
-| **Install** | `brew install` | `docker pull` | Script | GUI |
-| **Switch** | Instant (symlinks) | Container restart | Shell eval | Instant |
-| **New terminal** | Auto (`.zshrc`) | Manual | Script in rc | Manual GUI |
-| **Services** | Yes (MySQL, PgSQL) | Yes | No | Yes |
-| **Isolation** | Per-version data | Container | Global | Global |
-| **Footprint** | ~3MB binary | GBs | ~50MB | ~200MB |
+| **Install** | One click / command | `docker pull` | Script | GUI |
+| **Switch** | Instant (symlinks) | Container restart | Shell eval | GUI click |
+| **New terminal** | Auto (`.zshrc`) | Manual | Script in rc | Manual |
+| **Services** | MySQL, PostgreSQL | Yes | No | Yes |
+| **GUI** | Yes (Tauri v2) | — | — | Yes |
+| **Footprint** | ~3MB | GBs | ~50MB | ~200MB |
 
 ## Install
 
 ```bash
 git clone https://github.com/your/envswitch.git
 cd envswitch
-cargo build --release
+cargo build --release -p envswitch --bin envswitch
 sudo cp target/release/envswitch /usr/local/bin/
 
-# One-time setup
+# One-time setup (auto-writes .zshrc)
 envswitch init zsh
 exec zsh
 ```
 
-Requirements: `curl`, `rust` (build only).
+Or build the GUI:
 
-For PHP, Python, MySQL, PostgreSQL modules, [Homebrew](https://brew.sh) is required.
+```bash
+cd gui
+npx tauri build
+open target/release/bundle/macos/envswitch.app
+```
+
+Requirements: `curl`, `rust`, [Homebrew](https://brew.sh) (for php/python/mysql/pgsql), `fnm` (optional, for node).
 
 ### Linux
 
-Install [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux) — all modules work identically to macOS:
+Install [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux) — all modules work identically:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 ```
 
-If `brew` is not found when installing a module, envSwitch will show the Linuxbrew install guide.
-
 ## Supported Modules
 
-| Module | Source | Type |
-|--------|--------|------|
-| **jdk** | Azul Zulu API | SDK |
-| **go** | go.dev API | SDK |
-| **php** | Homebrew | SDK |
-| **python** | Homebrew | SDK |
-| **mysql** | Homebrew | Service |
-| **pgsql** | Homebrew | Service |
+| Module | Source | Type | Install |
+|--------|--------|------|---------|
+| **jdk** (8~26) | Azul Zulu API | SDK | Download + SHA256 |
+| **go** (1.2~1.26) | go.dev API | SDK | Download + SHA256 |
+| **node** (v0~v26) | nodejs.org API | SDK | Download + SHA256 |
+| **php** (5.6~8.6) | Homebrew | SDK | `brew install` + shim |
+| **python** (3.9~3.14) | Homebrew | SDK | `brew install` + shim |
+| **mysql** (8.0~9.x) | Homebrew | Service | `brew install` + shim |
+| **pgsql** (12~18) | Homebrew | Service | `brew install` + shim |
 
 ## Usage
 
 ```bash
-# Search available versions
-envswitch search <module>
+# ── Search ──────────────────────────────────
+envswitch search jdk           # Azul API
+envswitch search go            # go.dev API
+envswitch search node          # nodejs.org API
+envswitch search php           # brew search
+envswitch search python        # brew search
+envswitch search mysql         # brew search
+envswitch search pgsql         # brew search
 
-# Install a version
-envswitch install <module> <version>
+# ── Install ─────────────────────────────────
+envswitch install jdk 21.0.11
+envswitch install go 1.25.10
+envswitch install node 24.11.0
+envswitch install php 8.3      # brew install php@8.3
+envswitch install python 3.14  # brew install python@3.14
+envswitch install mysql 8.0    # brew install mysql@8.0
+envswitch install pgsql 16     # brew install postgresql@16
 
-# List installed versions
-envswitch list
-envswitch list jdk
+# ── Link (register existing installation) ───
+envswitch link jdk 8 /Library/Java/JavaVirtualMachines/jdk1.8.0.jdk/Contents/Home
 
-# Switch versions (instant)
-envswitch cover jdk 21
+# ── List ────────────────────────────────────
+envswitch list                 # all modules
+envswitch list jdk             # jdk only
+
+# ── Switch ──────────────────────────────────
+envswitch cover jdk 21         # instant (shim symlink)
 envswitch cover go 1.25.10
 envswitch cover php 8.3
+envswitch cover node 24
 envswitch cover python 3.14
 
-# Show current stack
-envswitch status
+# ── Status ──────────────────────────────────
+envswitch status               # current cover stack
 
-# Uncover (restore system default)
-envswitch uncover jdk
-envswitch uncover --all
+# ── Uncover ─────────────────────────────────
+envswitch uncover jdk          # restore system default
+envswitch uncover --all        # restore all
 
-# Services (MySQL, PostgreSQL)
-envswitch start mysql 8.0.46
-envswitch stop mysql
+# ── Services ────────────────────────────────
+envswitch start mysql 8.0.46   # start MySQL
+envswitch start pgsql 16.14    # start PostgreSQL
+envswitch stop mysql           # stop service
+envswitch stop pgsql
+envswitch service-status       # all services
 envswitch logs mysql --lines 100
 
-# Global (persist across terminals)
-envswitch cover jdk 21 --global
+# ── Global ──────────────────────────────────
+envswitch cover jdk 21 --global  # persist across terminals
 
-# Project config
+# ── Doctor ──────────────────────────────────
+envswitch doctor               # diagnose setup issues
+
+# ── cd-hook ─────────────────────────────────
+envswitch cd-hook on           # auto-switch on cd into .envswitchrc dirs
+
+# ── Project ─────────────────────────────────
 cd my-project
-envswitch init-project
-# edit .envswitchrc, then:
-envswitch auto
+envswitch init-project         # create .envswitchrc template
+envswitch auto                 # apply project config
 ```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `search <mod> [-r]` | Search available versions (local or remote) |
+| `install <mod> <ver> [--force]` | Install a version |
+| `uninstall <mod> <ver> [--purge]` | Uninstall a version (--purge removes data) |
+| `link <mod> <ver> <path>` | Register an existing installation |
+| `list [mod]` | List installed versions |
+| `cover <mod> <ver> [--global]` | Activate a version (instant shim switch) |
+| `uncover <mod>` | Deactivate a version |
+| `uncover --all` | Deactivate all |
+| `status` | Show current cover stack |
+| `start <mod> <ver>` | Start a service |
+| `stop <mod>` | Stop a service |
+| `service-status` | Show service states |
+| `logs <mod> [--lines N]` | View service logs |
+| `init [zsh\|bash]` | Setup shell integration |
+| `doctor` | Diagnose setup issues |
+| `cd-hook <on\|off>` | Toggle auto-switch on `cd` |
+| `init-project` | Create `.envswitchrc` |
+| `auto` | Apply `.envswitchrc` |
 
 ## How It Works
 
-envSwitch uses a **shims directory** (`~/.envswitch/shims/`) that is added to your PATH once during `init`. When you `cover` a version, envSwitch creates symlinks in the shims directory pointing to the active version's binaries. No `eval`, no shell hacks — just filesystem symlinks that work instantly in all terminals.
+envSwitch uses a **shims directory** (`~/.envswitch/shims/`) added to PATH once during `init`. When you `cover` a version, envSwitch creates symlinks in shims pointing to the active version's binaries. No `eval`, no shell hacks — filesystem symlinks work instantly in all terminals.
+
+The GUI uses the same mechanism — clicking "Cover" updates the symlinks, and all terminals pick up the change.
 
 ```
 ~/.envswitch/
@@ -126,38 +175,34 @@ envSwitch uses a **shims directory** (`~/.envswitch/shims/`) that is added to yo
 │   ├── php/8.3.31/
 │   └── mysql/8.0.46/
 ├── data/           # Service data (per-version)
-│   ├── mysql/8.0.46/
-│   └── pgsql/16.14/
 ├── state/          # Cover stack persistence
 ├── cache/          # Download cache
+├── config/         # cd-hook, etc.
 └── init.sh         # Shell integration (auto-generated)
 ```
 
-## Commands
+## GUI
 
-| Command | Description |
-|---------|-------------|
-| `search <mod>` | List available versions |
-| `install <mod> <ver>` | Install a version |
-| `uninstall <mod> <ver>` | Uninstall a version |
-| `list [mod]` | List installed versions |
-| `cover <mod> <ver>` | Activate a version |
-| `uncover <mod>` | Deactivate a version |
-| `uncover --all` | Deactivate all |
-| `status` | Show current cover stack |
-| `start <mod> <ver>` | Start a service |
-| `stop <mod>` | Stop a service |
-| `service-status` | Show service status |
-| `logs <mod>` | View service logs |
-| `init` | Setup shell integration |
-| `init-project` | Create `.envswitchrc` template |
-| `auto` | Apply `.envswitchrc` config |
+Built with **Tauri v2 + React + Tailwind CSS**:
+
+```bash
+cd gui
+npm install
+npx tauri dev     # development (hot reload)
+npx tauri build   # production build → .app / .dmg
+```
+
+Features: module list, version cover/uncover, service start/stop, platform detection.
 
 ## Development
 
 ```bash
-cargo build --release
+# CLI
+cargo build -p envswitch --bin envswitch --release
 cargo test -- --test-threads=1
+
+# GUI
+cd gui && npx tauri dev
 ```
 
 ## License
