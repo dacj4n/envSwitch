@@ -25,4 +25,5 @@ tauri = { version = "2.11.1", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 dirs = "6"
+chrono = "0.4"
 envswitch = { path = "../.." }

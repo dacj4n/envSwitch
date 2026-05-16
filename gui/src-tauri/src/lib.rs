@@ -1,4 +1,4 @@
-use envswitch::domain::{CoverScope, ModuleCategory};
+use envswitch::domain::{CoverScope, ModuleCategory, InstalledMetadata, InstalledVersion as DomainInstalledVersion};
 use envswitch::{install, environment, module_repo, service_mgr, platform};
 use serde::Serialize;
 
@@ -85,6 +85,46 @@ fn get_services() -> Vec<ServiceInfo> {
             port: status.running.as_ref().map(|s| s.port),
         }
     }).collect()
+}
+
+#[tauri::command]
+fn link_module(module: String, version: String, path: String) -> Result<String, String> {
+    let src = std::path::PathBuf::from(&path);
+    if !src.exists() {
+        return Err(format!("Path not found: {}", path));
+    }
+    let has_bin = src.join("bin").is_dir()
+        || src.join("Contents").join("Home").join("bin").is_dir();
+    if !has_bin {
+        return Err(format!("No bin/ directory at {}. Expected a software root with bin/ subdirectory.", path));
+    }
+
+    let dest = envswitch::infra::fs::envswitch_home().join("envs").join(&module).join(&version);
+    let _ = std::fs::create_dir_all(dest.parent().unwrap());
+    if dest.exists() {
+        let _ = std::fs::remove_dir_all(&dest);
+    }
+    std::os::unix::fs::symlink(&src, &dest)
+        .map_err(|e| format!("symlink: {}", e))?;
+
+    // Write metadata
+    let meta_path = envswitch::infra::fs::envswitch_home().join("envs").join(&module).join("metadata.json");
+    let mut meta: InstalledMetadata = if meta_path.exists() {
+        serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap_or_default())
+            .unwrap_or(InstalledMetadata { versions: vec![] })
+    } else {
+        InstalledMetadata { versions: vec![] }
+    };
+    meta.versions.retain(|v| v.version != version);
+    meta.versions.push(DomainInstalledVersion {
+        module_name: module.clone(), version: version.clone(),
+        install_path: dest, installed_at: chrono::Utc::now(), size_bytes: 0,
+    });
+    let _ = std::fs::create_dir_all(meta_path.parent().unwrap());
+    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
+        .map_err(|e| format!("write metadata: {}", e))?;
+
+    Ok(format!("{} {} linked from {}", module, version, src.display()))
 }
 
 #[tauri::command]
@@ -191,6 +231,7 @@ pub fn run() {
             get_services,
             get_platform,
             sync_local,
+            link_module,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
