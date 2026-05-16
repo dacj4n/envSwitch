@@ -269,6 +269,33 @@ fn sync_local() -> Vec<SyncResult> {
         }
     }
 
+    // ── System paths ──────────────────────────────────────────────
+    // macOS system Python
+    let sys_python = std::path::PathBuf::from("/usr/bin/python3");
+    if sys_python.exists() {
+        if let Ok(out) = std::process::Command::new(&sys_python).arg("--version").output() {
+            let ver_str = String::from_utf8_lossy(&out.stdout);
+            let ver = ver_str.trim().trim_start_matches("Python ").to_string();
+            if !ver.is_empty() {
+                let dest = envs_dir.join("python").join(&ver);
+                if !dest.exists() {
+                    let _ = std::fs::create_dir_all(dest.join("bin"));
+                    std::os::unix::fs::symlink(&sys_python, dest.join("bin").join("python3")).ok();
+                    std::os::unix::fs::symlink(&sys_python, dest.join("bin").join("python")).ok();
+                    // Also symlink pip3 if exists
+                    let sys_pip = std::path::PathBuf::from("/usr/bin/pip3");
+                    if sys_pip.exists() {
+                        std::os::unix::fs::symlink(&sys_pip, dest.join("bin").join("pip3")).ok();
+                    }
+                    results.push(SyncResult {
+                        module: "python".into(), version: ver,
+                        path: "/usr/bin".into(), source: "system".into()
+                    });
+                }
+            }
+        }
+    }
+
     results
 }
 
