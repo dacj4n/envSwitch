@@ -27,9 +27,18 @@ export default function VersionsPage() {
   const { t } = useTranslation();
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<Record<string, string[]>>({});
+  const [searchResults, setSearchResults] = useState<Record<string, string[]>>(() => {
+    try { return JSON.parse(sessionStorage.getItem('ev_search') || '{}'); } catch { return {}; }
+  });
   const [searching, setSearching] = useState<Record<string, boolean>>({});
   const [installing, setInstalling] = useState<string | null>(null);
+
+  // Persist search results to sessionStorage
+  const updateSearchResults = (r: Record<string, string[]>) => {
+    setSearchResults(r);
+    try { sessionStorage.setItem('ev_search', JSON.stringify(r)); } catch {}
+  };
+
   const refresh = () => {
     invoke('sync_local').then(() =>
       invoke<ModuleInfo[]>('list_modules').then(setModules)
@@ -50,7 +59,7 @@ export default function VersionsPage() {
   // Listen for search results (async, non-blocking)
   useEffect(() => {
     const unlisten = listen<{module: string; versions: string[]}>('search-results', (ev) => {
-      setSearchResults(r => ({ ...r, [ev.payload.module]: ev.payload.versions }));
+      updateSearchResults({ ...searchResults, [ev.payload.module]: ev.payload.versions });
       setSearching(s => ({ ...s, [ev.payload.module]: false }));
     });
     return () => { unlisten.then(fn => fn()); };
