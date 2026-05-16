@@ -3,6 +3,7 @@ use crate::infra::{download, fs};
 use crate::providers;
 use chrono::Utc;
 use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
 
 
 /// Install a specific version of a module.
@@ -65,20 +66,26 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             fix_exec_permissions(&dest)?;
         }
         "node" => {
-            eprintln!("Node.js delegates to fnm.");
-            if dest.exists() && !force {
-                return Err(format!("node {} is already installed. Use --force to reinstall.", version));
+            let asset = providers::node::NodeProvider::fetch_asset(version)?;
+            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            if !asset.checksum_url.is_empty() {
+                let chk_out = Command::new("curl").args(["-sL", &asset.checksum_url]).output()
+                    .map_err(|e| format!("fetch SHASUMS: {}", e))?;
+                let shasums = String::from_utf8_lossy(&chk_out.stdout);
+                let platform = crate::platform::Platform::current();
+                let (node_os, node_arch) = providers::node::node_platform(&platform);
+                let filename = format!("node-v{}-{}-{}.tar.gz", version, node_os, node_arch);
+                if let Some(expected) = shasums.lines().find(|l| l.contains(&filename)).and_then(|l| l.split_whitespace().next()) {
+                    eprintln!("Verifying SHA256...");
+                    download::verify_checksum(&archive, &ChecksumType::Sha256, Some(expected))?;
+                }
             }
-            let actual = providers::node::NodeProvider::install(version, &dest)?;
-            let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO: {}", e))?;
-            meta.versions.retain(|v| v.version != actual);
-            meta.versions.push(InstalledVersion {
-                module_name: module_name.to_string(), version: actual.clone(),
-                install_path: dest, installed_at: Utc::now(), size_bytes: 0,
-            });
-            fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
-            eprintln!("node {} installed via fnm.", actual);
-            return Ok(());
+            eprintln!("Extracting...");
+            if dest.exists() {
+                std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
+            }
+            providers::node::NodeProvider::install(&archive, &dest)?;
+            fix_exec_permissions(&dest)?;
         }
         "pgsql" => {
             eprintln!("PostgreSQL uses Homebrew for installation.");

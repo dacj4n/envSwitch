@@ -54,7 +54,7 @@ pub fn builtin_modules() -> Vec<Module> {
         },
         Module {
             name: "node".into(),
-            display_name: "Node.js (via fnm)".into(),
+            display_name: "Node.js".into(),
             category: ModuleCategory::Sdk,
             env_vars: vec![("NODE_HOME".into(), "{install_path}".into())],
             path_entries: vec!["bin".into()],

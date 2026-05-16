@@ -154,7 +154,7 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
 
     match module_name {
         "node" => {
-            eprintln!("Fetching Node versions via fnm...");
+            eprintln!("Fetching Node versions from nodejs.org...");
             let versions = providers::node::NodeProvider::fetch_remote_versions()?;
             for v in &versions { println!("  {}", v.version); }
         }
@@ -198,14 +198,6 @@ fn cmd_cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), 
         CoverScope::Session => "session",
         CoverScope::Global => "global",
     };
-
-    // Node: tracked in envswitch stack + delegates switching to fnm
-    if module_name == "node" {
-        eprintln!("{} {} covered ({})", module_name, version, scope_str);
-        let _ = environment::cover(module_name, version, scope);
-        print!("{}", providers::node::NodeProvider::cover_script(version)?);
-        return Ok(());
-    }
 
     eprintln!("{} {} covered ({})", module_name, version, scope_str);
     print!("{}", environment::cover(module_name, version, scope)?);
