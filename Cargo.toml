@@ -9,12 +9,7 @@ edition = "2021"
 default-run = "envswitch"
 
 [lib]
-name = "envswitch"
 path = "src/lib.rs"
-
-[[bin]]
-name = "envswitch"
-path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
