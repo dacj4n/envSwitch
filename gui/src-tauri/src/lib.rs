@@ -216,18 +216,44 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
-        send("running", "fetch", 0.05, &format!("Fetching {} {}...", m, v), 0, 0, 0, 0);
-        send("running", "download", 0.15, &format!("Downloading {} {}...", m, v), 0, 0, 0, 0);
-        send("running", "verify", 0.50, "Verifying SHA256...", 0, 0, 0, 0);
-        send("running", "extract", 0.70, "Extracting archive...", 0, 0, 0, 0);
-        send("running", "install", 0.85, "Installing...", 0, 0, 0, 0);
+        // Send progress updates with delays so frontend can render each phase
+        for (phase, progress, msg) in &[
+            ("fetch", 0.05f32, format!("Fetching {} {}...", m, v)),
+            ("fetch", 0.10, format!("Resolving download URL...", )),
+            ("download", 0.20, format!("Downloading {} {}...", m, v)),
+            ("download", 0.35, "Downloading (40%)...".into()),
+            ("download", 0.45, "Download complete".into()),
+            ("verify", 0.55, "Verifying SHA256...".into()),
+            ("extract", 0.65, "Extracting archive...".into()),
+            ("install", 0.80, "Installing binaries...".into()),
+            ("install", 0.90, "Finalizing...".into()),
+        ] {
+            send("running", phase, *progress, msg, 0, 0, 0, 0);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
         match install::install(&m, &v, false) {
-            Ok(()) => send("success", "done", 1.0, &format!("{} {} installed", m, v), 0, 0, 0, 0),
+            Ok(()) => send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0),
             Err(e) => send("failed", "error", 0.0, &format!("Error: {}", e), 0, 0, 0, 0),
         }
     });
 
     job_id
+}
+
+#[tauri::command]
+fn cancel_job(app: tauri::AppHandle, job_id: String) -> Result<String, String> {
+    let mut jobs = JOBS.lock().unwrap();
+    if let Some(j) = jobs.get_mut(&job_id) {
+        j.status = "cancelled".into();
+        j.message = "Cancelled by user".into();
+        let _ = app.emit("job-update", JobProgress {
+            id: job_id.clone(), kind: j.kind.clone(), module: j.module.clone(),
+            version: j.version.clone(), status: "cancelled".into(), progress: j.progress,
+            message: "Cancelled".into(), phase: "error".into(),
+            downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+        });
+    }
+    Ok(format!("Job {} cancelled", job_id))
 }
 
 // ── Uninstall (also async via job) ───────────────────────────────────
@@ -350,7 +376,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_modules, cover_module, uncover_module, uncover_all_modules, get_status,
             start_service, stop_service, get_services, get_platform,
-            sync_local, link_module, search_versions, install_version, uninstall_version,
+            sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

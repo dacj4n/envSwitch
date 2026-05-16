@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { XIcon, CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon, DownloadIcon, FileArchiveIcon, ShieldCheckIcon, WrenchIcon } from 'lucide-react';
 
@@ -169,8 +170,12 @@ export default function InstallPage() {
             {job.status === 'success' && 'Installation complete'}
             {job.status === 'failed' && 'Installation failed'}
           </span>
-          {isDone && (
+          {isDone ? (
             <button onClick={close} className="ml-auto px-3 py-1 text-xs rounded-md bg-secondary hover:bg-accent border border-border">Close</button>
+          ) : (
+            <button onClick={() => { invoke('cancel_job', { jobId }); }}
+              className="ml-auto px-3 py-1 text-xs rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30"
+            >Cancel</button>
           )}
         </div>
       )}
