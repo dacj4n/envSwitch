@@ -34,14 +34,8 @@ impl PostgresqlProvider {
             }
         }
 
-        // Batch query brew info for full version numbers
-        let full_versions = batch_brew_versions(&versions);
-
         let mut sorted: Vec<RemoteVersion> = versions.into_iter()
-            .map(|v| {
-                let full = full_versions.get(&v).cloned().unwrap_or(v);
-                RemoteVersion { version: full }
-            })
+            .map(|v| RemoteVersion { version: v })
             .collect();
         sorted.sort_by(|a, b| b.version.cmp(&a.version));
 
@@ -148,34 +142,6 @@ impl PostgresqlProvider {
         let start = all.len().saturating_sub(lines);
         Ok(all[start..].iter().map(|s| s.to_string()).collect())
     }
-}
-
-fn batch_brew_versions(versions: &BTreeSet<String>) -> std::collections::HashMap<String, String> {
-    let mut map = std::collections::HashMap::new();
-    let mut args: Vec<String> = vec!["info".into(), "--json=v2".into()];
-    for v in versions {
-        args.push(format!("postgresql@{}", v));
-    }
-
-    if let Ok(output) = Command::new("brew").args(&args).output() {
-        if output.status.success() {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&output.stdout)) {
-                if let Some(formulae) = json["formulae"].as_array() {
-                    for f in formulae {
-                        if let (Some(name), Some(ver)) = (
-                            f["name"].as_str(),
-                            f["versions"]["stable"].as_str(),
-                        ) {
-                            if let Some(short) = name.strip_prefix("postgresql@") {
-                                map.insert(short.to_string(), ver.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    map
 }
 
 fn find_binary(install_path: &Path, name: &str) -> Result<std::path::PathBuf, String> {

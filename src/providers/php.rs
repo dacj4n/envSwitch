@@ -26,22 +26,9 @@ impl PhpProvider {
             }
         }
 
-        // Batch-query actual full versions via single brew info call
-        let full_versions = batch_get_versions(&versions);
-
         let mut result: Vec<RemoteVersion> = versions
             .into_iter()
-            .map(|v| {
-                // Combine base version + variant suffix: "8.6-zts" → "8.6.0-zts"
-                let base = v.split('-').next().unwrap_or(&v);
-                let base_full = full_versions.get(base).cloned().unwrap_or_else(|| base.to_string());
-                let suffix = if v.contains('-') {
-                    v.splitn(2, '-').nth(1).map(|s| format!("-{}", s)).unwrap_or_default()
-                } else {
-                    String::new()
-                };
-                RemoteVersion { version: format!("{}{}", base_full, suffix) }
-            })
+            .map(|v| RemoteVersion { version: v })
             .collect();
         result.sort_by(|a, b| b.version.cmp(&a.version));
 
@@ -105,38 +92,6 @@ fn determine_formula(version: &str) -> Result<String, String> {
     // Default: use the tap (shivammathur for old versions)
     if brew_exists(&tap) { return Ok(tap); }
     Ok(core)
-}
-
-/// Query brew info for all versions in one batch call.
-fn batch_get_versions(versions: &BTreeSet<String>) -> std::collections::HashMap<String, String> {
-    let mut map = std::collections::HashMap::new();
-
-    // Build formula list: try both core and shivammathur for each version
-    let mut args: Vec<String> = vec!["info".into(), "--json=v2".into()];
-    for v in versions {
-        args.push(format!("php@{}", v));
-        args.push(format!("shivammathur/php/php@{}", v));
-    }
-
-    if let Ok(output) = std::process::Command::new("brew").args(&args).output() {
-        if output.status.success() {
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(&output.stdout)) {
-                if let Some(formulae) = json["formulae"].as_array() {
-                    for f in formulae {
-                        let name = f["name"].as_str().unwrap_or("");
-                        let ver = f["versions"]["stable"].as_str().unwrap_or("");
-                        if let Some(short) = name.split("php@").nth(1) {
-                            let short = short.split('/').last().unwrap_or(short);
-                            if !ver.is_empty() {
-                                map.entry(short.to_string()).or_insert_with(|| ver.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    map
 }
 
 fn get_formula_version(formula: &str) -> Result<String, String> {
