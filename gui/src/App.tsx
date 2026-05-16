@@ -13,20 +13,24 @@ import SettingsPage from './pages/Settings';
 const App = () => (
   <BrowserRouter>
     <Toaster position="bottom-right" theme="dark" />
-    <div className="flex h-full w-full overflow-hidden bg-background">
-      <Sidebar />
-      <main className="flex-1 overflow-hidden flex flex-col bg-background">
-        <Routes>
-          <Route path="/" element={<VersionsPage />} />
-          <Route path="/install/:jobId" element={<InstallPage />} />
-          <Route path="/services" element={<ServicesPage />} />
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="/logs" element={<LogsPage />} />
-          <Route path="/doctor" element={<DoctorPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </main>
-    </div>
+    <Routes>
+      <Route path="/install/:jobId" element={<InstallPage />} />
+      <Route path="*" element={
+        <div className="flex h-full w-full overflow-hidden bg-background">
+          <Sidebar />
+          <main className="flex-1 overflow-hidden flex flex-col bg-background">
+            <Routes>
+              <Route path="/" element={<VersionsPage />} />
+              <Route path="/services" element={<ServicesPage />} />
+              <Route path="/status" element={<StatusPage />} />
+              <Route path="/logs" element={<LogsPage />} />
+              <Route path="/doctor" element={<DoctorPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </main>
+        </div>
+      } />
+    </Routes>
   </BrowserRouter>
 );
 
