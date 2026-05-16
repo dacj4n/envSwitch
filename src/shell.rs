@@ -16,6 +16,10 @@ export PATH="{}:$PATH"
 _ENVSWITCH_BIN="{}"
 _ENVSWITCH_HOME="{}"
 
+# Auto-clear hash table on each prompt (shims may have changed)
+precmd() {{ hash -r 2>/dev/null; }} 2>/dev/null
+precmd_functions+=(precmd) 2>/dev/null
+
 # Shell function: eval only env vars (PATH changes via shims symlinks)
 envswitch() {{
     case "$1" in
