@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
@@ -46,29 +47,45 @@ export default function VersionsPage() {
     try { await invoke('uncover_module', { module: mod }); toast.success(`${mod} uncovered`); refresh(); }
     catch (e) { toast.error(`${e}`); }
   };
-  const doInstall = async (mod: string, ver: string) => {
+  // Listen for search results (async, non-blocking)
+  useEffect(() => {
+    const unlisten = listen<{module: string; versions: string[]}>('search-results', (ev) => {
+      setSearchResults(r => ({ ...r, [ev.payload.module]: ev.payload.versions }));
+      setSearching(s => ({ ...s, [ev.payload.module]: false }));
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, []);
+
+  // Listen for job updates (install/uninstall progress)
+  useEffect(() => {
+    const unlisten = listen<{id: string; kind: string; module: string; version: string; status: string; progress: number; message: string}>('job-update', (ev) => {
+      const p = ev.payload;
+      if (p.status === 'success' || p.status === 'failed') {
+        if (p.kind === 'install') toast.success(p.message);
+        else if (p.kind === 'uninstall') toast.success(p.message);
+        else if (p.status === 'failed') toast.error(p.message);
+        setInstalling(null);
+        refresh();
+      }
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, []);
+
+  const doInstall = (mod: string, ver: string) => {
     setInstalling(`${mod}:${ver}`);
-    try { await invoke('install_version', { module: mod, version: ver }); toast.success(`${ver} installed`); refresh(); }
-    catch (e) { toast.error(`${e}`); }
-    setInstalling(null);
+    invoke('install_version', { module: mod, version: ver }); // returns job_id immediately, events handle progress
   };
-  const doUninstall = async (mod: string, ver: string) => {
-    try { await invoke('uninstall_version', { module: mod, version: ver }); toast.success('uninstalled'); refresh(); }
-    catch (e) { toast.error(`${e}`); }
+  const doUninstall = (mod: string, ver: string) => {
+    invoke('uninstall_version', { module: mod, version: ver }); // async via job
   };
 
   const toggleModule = (mod: string) => {
-    // Expand immediately — only shows installed versions (no API call)
     setExpanded(expanded === mod ? null : mod);
   };
 
-  const fetchAvailable = async (mod: string) => {
+  const fetchAvailable = (mod: string) => {
     setSearching(s => ({ ...s, [mod]: true }));
-    try {
-      const results = await invoke<string[]>('search_versions', { module: mod });
-      setSearchResults(r => ({ ...r, [mod]: results }));
-    } catch { setSearchResults(r => ({ ...r, [mod]: [] })); }
-    setSearching(s => ({ ...s, [mod]: false }));
+    invoke('search_versions', { module: mod }); // returns immediately, results via event
   };
 
   return (
