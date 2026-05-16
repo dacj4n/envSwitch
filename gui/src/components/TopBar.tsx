@@ -11,19 +11,21 @@ export default function TopBar({ title, subtitle, onRefresh }: TopBarProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+    <header className="flex items-center justify-between px-6 py-4 bg-card border-b border-border shrink-0">
       <div>
-        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
-        {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        <h1 className="text-foreground font-semibold text-base leading-tight">{title}</h1>
+        {subtitle && <p className="text-muted-foreground text-xs mt-0.5">{subtitle}</p>}
       </div>
-      {onRefresh && (
-        <button onClick={onRefresh}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-colors"
-        >
-          <RefreshCwIcon className="w-3.5 h-3.5" />
-          {t('common.refresh')}
-        </button>
-      )}
-    </div>
+      <div className="flex items-center gap-3">
+        {onRefresh && (
+          <button onClick={onRefresh}
+            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-all border border-border"
+          >
+            <RefreshCwIcon className="w-3.5 h-3.5" />
+            <span className="text-xs">{t('common.refresh')}</span>
+          </button>
+        )}
+      </div>
+    </header>
   );
 }
