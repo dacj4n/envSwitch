@@ -199,9 +199,10 @@ fn cmd_cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), 
         CoverScope::Global => "global",
     };
 
-    // Node delegates to fnm — managed by fnm, not envswitch stack
+    // Node: tracked in envswitch stack + delegates switching to fnm
     if module_name == "node" {
-        eprintln!("{} {} covered (via fnm)", module_name, version);
+        eprintln!("{} {} covered ({})", module_name, version, scope_str);
+        let _ = environment::cover(module_name, version, scope);
         print!("{}", providers::node::NodeProvider::cover_script(version)?);
         return Ok(());
     }

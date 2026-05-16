@@ -66,8 +66,19 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
         }
         "node" => {
             eprintln!("Node.js delegates to fnm.");
-            providers::node::NodeProvider::install(version, &dest)?;
-            eprintln!("node {} installed via fnm.", version);
+            if dest.exists() && !force {
+                return Err(format!("node {} is already installed. Use --force to reinstall.", version));
+            }
+            let actual = providers::node::NodeProvider::install(version, &dest)?;
+            // Write metadata so list shows it
+            let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO: {}", e))?;
+            meta.versions.retain(|v| v.version != actual);
+            meta.versions.push(InstalledVersion {
+                module_name: module_name.to_string(), version: actual.clone(),
+                install_path: dest, installed_at: Utc::now(), size_bytes: 0,
+            });
+            fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
+            eprintln!("node {} installed via fnm.", actual);
             return Ok(());
         }
         "pgsql" => {

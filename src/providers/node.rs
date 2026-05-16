@@ -25,12 +25,13 @@ impl NodeProvider {
         Ok(versions)
     }
 
-    /// Run fnm install for a version.
-    pub fn install(version: &str, _dest: &std::path::Path) -> Result<String, String> {
-        let ver = version.trim_start_matches('v');
-        eprintln!("Installing Node {} via fnm...", ver);
+    /// Run fnm install + create envswitch marker.
+    pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
+        let ver = if version.starts_with('v') { version.to_string() } else { format!("v{}", version) };
+
+        eprintln!("Installing Node {} via fnm...", ver.trim_start_matches('v'));
         let status = Command::new("fnm")
-            .args(["install", ver])
+            .args(["install", ver.trim_start_matches('v')])
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .status()
@@ -38,7 +39,11 @@ impl NodeProvider {
         if !status.success() {
             return Err(format!("fnm install {} failed", ver));
         }
-        Ok(format!("v{}", ver))
+
+        // Create marker directory so list/status can track it
+        let _ = std::fs::create_dir_all(dest);
+
+        Ok(ver)
     }
 
     /// Output fnm use command (eval'd by shell function for immediate effect).
