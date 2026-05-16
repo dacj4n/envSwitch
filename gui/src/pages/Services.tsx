@@ -34,7 +34,7 @@ export default function ServicesPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <TopBar title={t('nav.services')} subtitle="Start / Stop database services" onRefresh={refresh} />
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
         {services.map(svc => {

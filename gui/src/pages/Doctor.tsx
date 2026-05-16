@@ -34,7 +34,7 @@ export default function DoctorPage() {
   const errCount = checks.filter(c => c.status === 'error').length;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <TopBar title={t('doctor.title')} subtitle={t('doctor.subtitle')} />
 
       <div className="flex-1 overflow-y-auto px-5 py-4">

@@ -17,7 +17,7 @@ export default function LogsPage() {
   const [lines, setLines] = useState(50);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <TopBar title={t('nav.logs')} subtitle="Service logs with color-coded levels" />
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         {/* Controls */}

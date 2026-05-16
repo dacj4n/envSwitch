@@ -72,7 +72,7 @@ export default function VersionsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <TopBar
         title={t('nav.versions')}
         subtitle="Manage installed SDK versions"

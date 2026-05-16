@@ -39,7 +39,7 @@ export default function StatusPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <TopBar title={t('nav.status')} subtitle="Active version covers" onRefresh={refresh} />
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
