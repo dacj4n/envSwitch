@@ -63,9 +63,26 @@ export default function InstallPage() {
     if (logRef.current) { logRef.current.scrollTop = logRef.current.scrollHeight; }
   }, [logs]);
 
+  // Animate progress smoothly between backend updates
+  const [animProgress, setAnimProgress] = useState(0);
+  const targetRef = useRef(0);
+  useEffect(() => {
+    targetRef.current = job?.progress ?? 0;
+    if (job?.status === 'success') { setAnimProgress(1); return; }
+    if (job?.status === 'failed') { setAnimProgress(0); return; }
+    const timer = setInterval(() => {
+      setAnimProgress(prev => {
+        if (prev >= targetRef.current) return prev; // don't go backward
+        const next = prev + (targetRef.current - prev) * 0.05; // ease in
+        return next >= targetRef.current ? targetRef.current : next;
+      });
+    }, 80);
+    return () => clearInterval(timer);
+  }, [job?.progress, job?.status]);
+
   const close = () => { getCurrentWindow().close(); };
   const isDone = job?.status === 'success' || job?.status === 'failed';
-  const progress = job?.progress ?? 0;
+  const progress = animProgress;
   const curPhase = PHASES.find(p => p.key === job?.phase);
 
   return (
