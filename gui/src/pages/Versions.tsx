@@ -58,14 +58,14 @@ export default function VersionsPage() {
 
   const toggleModule = async (mod: string) => {
     if (expanded === mod) { setExpanded(null); return; }
+    // Show immediately, search in background
     setExpanded(mod);
-    if (searchResults[mod]) return;
-    setSearching(s => ({ ...s, [mod]: true }));
-    try {
-      const results = await invoke<string[]>('search_versions', { module: mod });
-      setSearchResults(r => ({ ...r, [mod]: results }));
-    } catch { setSearchResults(r => ({ ...r, [mod]: [] })); }
-    setSearching(s => ({ ...s, [mod]: false }));
+    if (!searchResults[mod]) {
+      setSearching(s => ({ ...s, [mod]: true }));
+      invoke<string[]>('search_versions', { module: mod })
+        .then(results => { setSearchResults(r => ({ ...r, [mod]: results })); setSearching(s => ({ ...s, [mod]: false })); })
+        .catch(() => { setSearchResults(r => ({ ...r, [mod]: [] })); setSearching(s => ({ ...s, [mod]: false })); });
+    }
   };
 
   return (

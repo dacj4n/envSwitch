@@ -129,7 +129,7 @@ fn link_module(module: String, version: String, path: String) -> Result<String, 
 
 #[tauri::command]
 fn search_versions(module: String) -> Vec<String> {
-    match module.as_str() {
+    let versions: Vec<String> = match module.as_str() {
         "jdk" => envswitch::providers::jdk::JdkProvider::fetch_remote_versions().unwrap_or_default(),
         "go" => envswitch::providers::go::GoProvider::fetch_remote_versions()
             .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
@@ -144,7 +144,9 @@ fn search_versions(module: String) -> Vec<String> {
         "pgsql" => envswitch::providers::postgresql::PostgresqlProvider::fetch_remote_versions()
             .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
         _ => vec![],
-    }
+    };
+    // Cap at 200 to avoid UI freeze with 800+ versions (node)
+    if versions.len() > 200 { versions[..200].to_vec() } else { versions }
 }
 
 #[tauri::command]
