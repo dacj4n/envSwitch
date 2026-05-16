@@ -154,4 +154,7 @@ pub enum Commands {
 
     /// Check envswitch setup and diagnose issues
     Doctor,
+
+    /// Output shell env for global covers (used by init.sh)
+    LoadGlobals,
 }

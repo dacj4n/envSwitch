@@ -5,19 +5,6 @@ import { toast } from 'sonner';
 import TopBar from '../components/TopBar';
 import { GlobeIcon, NetworkIcon, TerminalIcon, CopyIcon } from 'lucide-react';
 
-const CLI_EXAMPLES = [
-  { cmd: 'envswitch search jdk', desc: 'Search available JDK versions' },
-  { cmd: 'envswitch install jdk 21.0.11', desc: 'Install JDK 21' },
-  { cmd: 'envswitch cover jdk 21.0.11', desc: 'Activate JDK 21 (shim switch)' },
-  { cmd: 'envswitch cover go 1.25.10', desc: 'Activate Go 1.25.10' },
-  { cmd: 'envswitch status', desc: 'Show current cover stack' },
-  { cmd: 'envswitch uncover --all', desc: 'Restore all system defaults' },
-  { cmd: 'envswitch list', desc: 'List installed versions' },
-  { cmd: 'envswitch doctor', desc: 'Diagnose setup issues' },
-  { cmd: 'envswitch start mysql 8.0', desc: 'Start MySQL service' },
-  { cmd: 'envswitch cd-hook on', desc: 'Enable auto-switch on cd' },
-];
-
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [proxy, setProxy] = useState('');
@@ -30,7 +17,7 @@ export default function SettingsPage() {
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
     i18n.changeLanguage(lang);
-    toast.success(lang === 'zh' ? '已切换为中文' : 'Switched to English');
+    toast.success(lang === 'zh' ? t('settings.switchedZh') : t('settings.switchedEn'));
   };
 
   return (
@@ -72,8 +59,8 @@ export default function SettingsPage() {
               <input type="text" value={proxy} onChange={e => setProxy(e.target.value)}
                 placeholder="http://127.0.0.1:7890"
                 className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary" />
-              <button onClick={() => { invoke('set_proxy', { proxy }); toast.success('Proxy saved — takes effect on next install'); }}
-                className="px-4 py-2 rounded-md bg-primary/15 text-primary border border-primary/30 text-sm font-medium hover:bg-primary/20">Save</button>
+              <button onClick={() => { invoke('set_proxy', { proxy }); toast.success(t('settings.proxySaved')); }}
+                className="px-4 py-2 rounded-md bg-primary/15 text-primary border border-primary/30 text-sm font-medium hover:bg-primary/20">{t('common.save')}</button>
             </div>
           </div>
         </div>
@@ -82,11 +69,22 @@ export default function SettingsPage() {
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
             <TerminalIcon className="w-4 h-4 text-primary" />
-            <span className="font-semibold text-sm text-foreground">CLI Examples</span>
-            <span className="ml-auto text-[10px] text-muted-foreground font-mono">{CLI_EXAMPLES.length} commands</span>
+            <span className="font-semibold text-sm text-foreground">{t('settings.cliExamples')}</span>
+            <span className="ml-auto text-[10px] text-muted-foreground font-mono">{10} {t('common.commands')}</span>
           </div>
           <div className="divide-y divide-border/50 bg-background font-mono">
-            {CLI_EXAMPLES.map((ex, i) => (
+            {[
+                { cmd: 'envswitch search jdk', desc: t('cli.searchJdk') },
+                { cmd: 'envswitch install jdk 21.0.11', desc: t('cli.installJdk') },
+                { cmd: 'envswitch cover jdk 21.0.11', desc: t('cli.coverJdk') },
+                { cmd: 'envswitch cover go 1.25.10', desc: t('cli.coverGo') },
+                { cmd: 'envswitch status', desc: t('cli.status') },
+                { cmd: 'envswitch uncover --all', desc: t('cli.uncoverAll') },
+                { cmd: 'envswitch list', desc: t('cli.list') },
+                { cmd: 'envswitch doctor', desc: t('cli.doctor') },
+                { cmd: 'envswitch start mysql 8.0', desc: t('cli.startMysql') },
+                { cmd: 'envswitch cd-hook on', desc: t('cli.cdHook') },
+              ].map((ex, i) => (
               <div key={i} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors group">
                 <span className="text-primary text-xs shrink-0">$</span>
                 <span className="text-sm text-foreground whitespace-nowrap">{ex.cmd}</span>

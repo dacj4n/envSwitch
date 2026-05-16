@@ -72,6 +72,15 @@ pub fn render_env() -> String {
     render_full_env(&load_stack())
 }
 
+pub fn render_global_env() -> String {
+    let stack = load_stack();
+    let globals: Vec<StackEntry> = stack.iter()
+        .filter(|e| matches!(e.scope, CoverScope::Global))
+        .cloned()
+        .collect();
+    render_full_env(&globals)
+}
+
 pub fn uncover_all() -> Result<String, String> {
     let stack: Vec<StackEntry> = vec![];
     save_stack(&stack);

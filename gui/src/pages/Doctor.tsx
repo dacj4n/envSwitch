@@ -19,10 +19,10 @@ export default function DoctorPage() {
     ]).then(([plat, mods]) => {
       setPlatform(plat);
       const items: CheckItem[] = [
-        { label: 'Platform detected', status: 'ok', detail: plat },
-        { label: 'Modules loaded', status: 'ok', detail: `${(mods as any[]).length} modules` },
-        { label: 'Shims directory', status: 'ok', detail: '~/.envswitch/shims/' },
-        { label: 'Homebrew available', status: mods ? 'ok' : 'warn', detail: mods ? 'brew found' : 'brew not found' },
+        { label: t('doctor.platformDetected'), status: 'ok', detail: plat },
+        { label: t('doctor.modulesLoaded'), status: 'ok', detail: `${(mods as any[]).length} ${t('doctor.countModules')}` },
+        { label: t('doctor.shimsDir'), status: 'ok', detail: '~/.envswitch/shims/' },
+        { label: t('doctor.brewAvailable'), status: mods ? 'ok' : 'warn', detail: mods ? t('doctor.brewFound') : t('doctor.brewNotFound') },
       ];
       setChecks(items);
       setLoading(false);
@@ -39,7 +39,7 @@ export default function DoctorPage() {
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2Icon className="w-4 h-4 animate-spin" /> Running checks...</div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2Icon className="w-4 h-4 animate-spin" /> {t('doctor.runningChecks')}</div>
         ) : (
           <div className="space-y-4">
             {/* Summary */}
@@ -47,9 +47,9 @@ export default function DoctorPage() {
               <HeartPulseIcon className="w-8 h-8 text-primary" />
               <div>
                 <div className="text-sm font-semibold text-foreground">
-                  {errCount > 0 ? `${errCount} issues found` : warnCount > 0 ? `${warnCount} warnings` : 'All systems OK'}
+                  {errCount > 0 ? `${errCount} ${t('doctor.issuesFound')}` : warnCount > 0 ? `${warnCount} ${t('doctor.warnings')}` : t('doctor.allOk')}
                 </div>
-                <div className="text-xs text-muted-foreground">{platform} · {okCount} checks passed</div>
+                <div className="text-xs text-muted-foreground">{platform} · {okCount} {t('doctor.checksPassed')}</div>
               </div>
               <div className="ml-auto flex items-center gap-3">
                 <div className="flex items-center gap-1 text-xs"><CheckCircle2Icon className="w-3.5 h-3.5 text-success" />{okCount}</div>

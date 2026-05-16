@@ -57,12 +57,12 @@ export default function LogsPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <TopBar title={t('nav.logs')} subtitle="Real service logs from running instances" />
+      <TopBar title={t('nav.logs')} subtitle={t('service.logsSubtitle')} />
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3">
             <ScrollTextIcon className="w-4 h-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Log Viewer</span>
+            <span className="text-sm font-semibold text-foreground">{t('service.logViewer')}</span>
             <div className="flex items-center gap-1 ml-auto">
               <select value={service} onChange={e => setService(e.target.value)}
                 className="px-2.5 py-1.5 rounded-md border border-border bg-background text-xs text-foreground">
@@ -73,7 +73,7 @@ export default function LogsPage() {
                 className="px-3 py-1.5 rounded-md text-xs bg-secondary hover:bg-accent border border-border text-secondary-foreground flex items-center gap-1"
               >
                 {loading ? <Loader2Icon className="w-3 h-3 animate-spin" /> : null}
-                Refresh
+                {t('common.refresh')}
               </button>
             </div>
           </div>
@@ -112,12 +112,12 @@ export default function LogsPage() {
               })}
             {logs.length === 0 && !loading && (
               <div className="px-4 py-12 text-center text-muted-foreground text-xs">
-                {version ? 'No log entries — the service may not have been started yet' : 'No installed version found'}
+                {version ? t('common.noLogs') : t('common.noVersionFound')}
               </div>
             )}
             {loading && (
               <div className="px-4 py-12 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
-                <Loader2Icon className="w-3 h-3 animate-spin" /> Loading...
+                <Loader2Icon className="w-3 h-3 animate-spin" /> {t('common.loading')}
               </div>
             )}
           </div>

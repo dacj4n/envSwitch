@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
 
 interface JobUpdate {
@@ -12,6 +13,7 @@ const PHASES = ['fetching', 'downloading', 'verifying', 'extracting', 'installin
 
 export default function InstallPage() {
   const { jobId } = useParams<{ jobId: string }>();
+  const { t } = useTranslation();
   const [job, setJob] = useState<JobUpdate | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
@@ -66,7 +68,7 @@ export default function InstallPage() {
           </div>
           <div>
             <div className="text-sm font-semibold text-foreground">
-              {job ? `${job.module} ${job.version}` : 'Installing...'}
+              {job ? `${job.module} ${job.version}` : t('install.title')}
             </div>
           </div>
         </div>
@@ -74,7 +76,7 @@ export default function InstallPage() {
           {!hideCancel && (
             <button onClick={cancel}
               className="px-2.5 py-1 text-[11px] rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 font-medium"
-            >Cancel</button>
+            >{t('install.cancel')}</button>
           )}
         </div>
       </div>
@@ -127,7 +129,7 @@ export default function InstallPage() {
           );
         })}
         {logs.length === 0 && (
-          <div className="text-muted-foreground/20 italic">Waiting for job to begin...</div>
+          <div className="text-muted-foreground/20 italic">{t('install.waiting')}</div>
         )}
       </div>
     </div>

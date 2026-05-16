@@ -21,17 +21,14 @@ export default function StatusPage() {
 
   const refresh = () => {
     invoke<ActiveCover[]>('get_status').then(setCovers);
-    // Get all module names for full table
     invoke<{name:string}[]>('list_modules').then(list => setAllModules(list.map((m: any) => m.name)));
   };
   useEffect(() => { refresh(); }, []);
 
-  // Build status list: covered modules + non-covered
   const coveredSet = new Set(covers.map(c => c.module_name));
   const statusList: { module: string; activeVersion: string | null; scope: string; isActive: boolean }[] = covers.map(c => ({
     module: c.module_name, activeVersion: c.version, scope: c.scope, isActive: true
   }));
-  // Add non-covered modules
   for (const name of allModules) {
     if (!coveredSet.has(name)) {
       statusList.push({ module: name, activeVersion: null, scope: '', isActive: false });
@@ -40,17 +37,17 @@ export default function StatusPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <TopBar title={t('nav.status')} subtitle="Active version covers" onRefresh={refresh} />
+      <TopBar title={t('nav.status')} subtitle={t('status.subtitle')} onRefresh={refresh} />
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         {statusList.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">No active covers</div>
+          <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">{t('status.noActiveCovers')}</div>
         ) : (
           <div className="rounded-xl border border-border bg-card overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-4 border-b border-border">
               <CheckCircleIcon className="w-4 h-4 text-primary" />
-              <span className="font-semibold text-sm text-foreground">Environment Status</span>
-              <span className="ml-auto text-xs text-muted-foreground font-mono">{covers.length} active</span>
+              <span className="font-semibold text-sm text-foreground">{t('status.envStatus')}</span>
+              <span className="ml-auto text-xs text-muted-foreground font-mono">{covers.length} {t('status.active')}</span>
             </div>
             <div className="divide-y divide-border/50">
               {statusList.map(s => {
@@ -82,7 +79,7 @@ export default function StatusPage() {
                           ~/.envswitch/shims/{s.module} → ~/.envswitch/envs/{s.module}/{s.activeVersion}
                         </span>
                       ) : (
-                        <span className="font-mono text-xs text-muted-foreground/40 truncate block">not covered</span>
+                        <span className="font-mono text-xs text-muted-foreground/40 truncate block">{t('status.notCovered')}</span>
                       )}
                     </div>
                     <div className="shrink-0">
@@ -91,7 +88,7 @@ export default function StatusPage() {
                           {s.scope}
                         </span>
                       ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border font-medium">inactive</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/30 text-muted-foreground border border-border font-medium">{t('status.inactive')}</span>
                       )}
                     </div>
                     <div className="shrink-0 flex items-center justify-center">
@@ -103,7 +100,7 @@ export default function StatusPage() {
             </div>
             <div className="px-5 py-3 border-t border-border/50 bg-muted/5">
               <span className="text-[11px] font-mono text-muted-foreground/60">
-                Shims directory: ~/.envswitch/shims — ensure it's in your $PATH
+                {t('status.shimsHint')}
               </span>
             </div>
           </div>

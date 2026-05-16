@@ -101,7 +101,7 @@ export default function VersionsPage() {
     <div className="flex flex-col h-full min-h-0">
       <TopBar
         title={t('nav.versions')}
-        subtitle="Manage installed SDK versions"
+        subtitle={t('versions.subtitle')}
         onRefresh={refresh}
       />
 
@@ -138,7 +138,7 @@ export default function VersionsPage() {
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {installedCount} installed · {results.length || '?'} available
+                    {installedCount} {t('common.installed')} · {results.length || '?'} {t('common.availableCount')}
                   </div>
                 </div>
                 <div className="text-muted-foreground">
@@ -168,7 +168,7 @@ export default function VersionsPage() {
                               {m.name}@{ver}
                             </span>
                             {isActive && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/25">ACTIVE</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/25">{t('common.active')}</span>
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
@@ -179,11 +179,11 @@ export default function VersionsPage() {
                           {isActive ? (
                             <button onClick={() => uncover(m.name)}
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-warning/10 text-warning hover:bg-warning/20 border border-warning/30 font-medium"
-                            ><XCircleIcon className="w-3 h-3" /> Uncover</button>
+                            ><XCircleIcon className="w-3 h-3" /> {t('common.uncover')}</button>
                           ) : (
                             <button onClick={() => cover(m.name, ver)}
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
-                            ><PlayIcon className="w-3 h-3" /> Cover</button>
+                            ><PlayIcon className="w-3 h-3" /> {t('common.cover')}</button>
                           )}
                           {/* Hide uninstall only for system paths (not Homebrew) */}
                           {(!m.is_symlinked?.[idx] || m.source_paths?.[idx]?.startsWith('/opt/homebrew')) && (
@@ -200,7 +200,7 @@ export default function VersionsPage() {
                   <div className="border-t border-border/50">
                     <div className="flex items-center gap-2 px-5 py-3 bg-muted/5 border-b border-border/50">
                       <CircleIcon className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{t('common.available')}</span>
                       <div className="flex-1" />
                       {results.length > 0 && <span className="text-[10px] text-muted-foreground font-mono">{results.length} found</span>}
                       <button onClick={() => fetchAvailable(m.name)}
@@ -209,7 +209,7 @@ export default function VersionsPage() {
                         }`}
                       >
                         {isSearching ? <Loader2Icon className="w-2.5 h-2.5 animate-spin" /> : <DownloadIcon className="w-2.5 h-2.5" />}
-                        Fetch
+                        {t('common.fetch')}
                       </button>
                     </div>
                     {results.length > 0 && (
@@ -228,7 +228,7 @@ export default function VersionsPage() {
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-accent/50 text-accent-foreground hover:bg-accent border border-border/50 font-medium disabled:opacity-50"
                               >
                                 {busy ? <Loader2Icon className="w-2.5 h-2.5 animate-spin" /> : <DownloadIcon className="w-2.5 h-2.5" />}
-                                Install
+                                {t('common.install')}
                               </button>
                             </div>
                           );
@@ -237,7 +237,7 @@ export default function VersionsPage() {
                     )}
                     {!isSearching && results.length === 0 && (
                       <div className="px-5 py-3 text-[11px] text-muted-foreground/50 font-mono">
-                        click Fetch to load available versions
+{t('versions.clickFetch')}
                       </div>
                     )}
                   </div>

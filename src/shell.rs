@@ -48,18 +48,7 @@ __envswitch_cd_hook
 
 # Load env vars from global covers on shell startup
 __envswitch_load_global() {{
-    local sf="${{_ENVSWITCH_HOME}}/state/global.json"
-    if [ -f "$sf" ] && command -v python3 >/dev/null 2>&1; then
-        eval "$(python3 -c "
-import json
-with open('$sf') as f:
-    data = json.load(f)
-for c in data.get('covers', []):
-    mod = c.get('module_name','')
-    ver = c.get('version','')
-    print(f'envswitch cover {{mod}} {{ver}} --global 2>/dev/null')
-" 2>/dev/null)"
-    fi
+    eval "$("$_ENVSWITCH_BIN" load-globals 2>/dev/null)"
 }}
 __envswitch_load_global
 "##,

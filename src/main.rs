@@ -71,6 +71,7 @@ fn main() {
         Commands::CdHook { state } => cmd_cd_hook(&state),
         Commands::Link { module, version, path } => cmd_link(&module, &version, &path),
         Commands::Doctor => cmd_doctor(),
+        Commands::LoadGlobals => { print!("{}", crate::environment::render_global_env()); Ok(()) }
     };
 
     if let Err(e) = result {

@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "envSwitch",
-        "width": 1200,
-        "height": 800,
+        "width": 1000,
+        "height": 750,
         "resizable": true,
         "fullscreen": false
       }
