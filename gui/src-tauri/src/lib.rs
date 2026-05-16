@@ -216,9 +216,12 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
+        // Wait for the install window to open and register event listener
+        std::thread::sleep(std::time::Duration::from_millis(800));
+
         // Phase 1: Prep (before real work)
         send("running", "fetch", 0.05, &format!("Preparing to install {} {}...", m, v), 0, 0, 0, 0);
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        std::thread::sleep(std::time::Duration::from_millis(300));
 
         // Phase 2: Run install in background — send heartbeat during the wait
         send("running", "download", 0.10, "Downloading and installing (this may take a while)...", 0, 0, 0, 0);
@@ -252,6 +255,17 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
     });
 
     job_id
+}
+
+#[tauri::command]
+fn get_job_state(job_id: String) -> Option<JobProgress> {
+    let jobs = JOBS.lock().unwrap();
+    jobs.get(&job_id).map(|j| JobProgress {
+        id: j.id.clone(), kind: j.kind.clone(), module: j.module.clone(),
+        version: j.version.clone(), status: j.status.clone(), progress: j.progress,
+        message: j.message.clone(), phase: "running".into(),
+        downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+    })
 }
 
 #[tauri::command]
@@ -390,7 +404,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_modules, cover_module, uncover_module, uncover_all_modules, get_status,
             start_service, stop_service, get_services, get_platform,
-            sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job,
+            sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job, get_job_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

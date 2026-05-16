@@ -19,6 +19,11 @@ export default function InstallPage() {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Poll current state immediately (backend may have started before window opened)
+    invoke<JobUpdate | null>('get_job_state', { jobId }).then(j => {
+      if (j) { setJob(j); setLogs([`[${j.phase}] ${j.message}`]); }
+    });
+
     const unlisten = listen<JobUpdate>('job-update', (ev) => {
       if (ev.payload.id !== jobId) return;
       setJob(ev.payload);
