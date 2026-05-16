@@ -274,3 +274,100 @@ fn test_cover_to_uncover_all() {
 
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn test_cover_switch_same_module() {
+    let home = test_home("cover_switch");
+    let jdk17 = home.join("envs").join("jdk").join("17").join("bin");
+    fs::create_dir_all(&jdk17).unwrap();
+    fs::write(jdk17.join("java"), b"fake").unwrap();
+    let jdk21 = home.join("envs").join("jdk").join("21").join("bin");
+    fs::create_dir_all(&jdk21).unwrap();
+    fs::write(jdk21.join("java"), b"fake").unwrap();
+
+    ok(&["cover", "jdk", "17"], &home);
+    // Switch to 21, should replace 17
+    let out = ok(&["cover", "jdk", "21"], &home);
+    assert!(out.contains("jdk/21"));
+    let status = ok(&["status"], &home);
+    // Should have only 1 jdk entry (21), not 2
+    assert!(status.contains("21") && !status.contains("17"));
+
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_cover_multi_module_uncover_one() {
+    let home = test_home("multi_uncov");
+    for (m, v) in &[("jdk", "21"), ("go", "1.22")] {
+        let d = home.join("envs").join(m).join(v).join("bin");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("java"), b"fake").unwrap();
+        fs::write(d.join("go"), b"fake").unwrap();
+    }
+    ok(&["cover", "jdk", "21"], &home);
+    ok(&["cover", "go", "1.22"], &home);
+
+    // Uncover only jdk, go should remain
+    ok(&["uncover", "jdk"], &home);
+    let status = ok(&["status"], &home);
+    assert!(!status.contains("jdk"));
+    assert!(status.contains("go"));
+
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_service_status_not_installed() {
+    let home = test_home("svc_status");
+    // service-status should run without any installed services
+    let out = ok(&["service-status"], &home);
+    assert!(out.contains("Stopped") || out.contains("mysql"));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_search_output_format() {
+    let home = test_home("search_fmt");
+    // search should not error for supported modules
+    for m in &["jdk", "go"] {
+        let out = ok(&["search", m], &home);
+        assert!(!out.is_empty(), "search {} returned empty", m);
+    }
+    let e = err(&["search", "nonexistent"], &home);
+    assert!(!e.is_empty(), "search unknown should error");
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_cd_hook_toggle() {
+    let home = test_home("cdhook");
+    let output = run(&["cd-hook", "on"], &home);
+    assert!(output.status.success());
+    assert!(home.join("config").join("cd-hook").exists());
+
+    let output2 = run(&["cd-hook", "off"], &home);
+    assert!(output2.status.success());
+
+    let e = err(&["cd-hook", "invalid"], &home);
+    assert!(e.contains("on|off"));
+    let _ = fs::remove_dir_all(&home);
+}
+
+#[test]
+fn test_uncover_all_with_multi_module() {
+    let home = test_home("uncover_all_multi");
+    for (m, v) in &[("jdk", "21"), ("go", "1.22")] {
+        let d = home.join("envs").join(m).join(v).join("bin");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("java"), b"fake").unwrap();
+        fs::write(d.join("go"), b"fake").unwrap();
+    }
+    ok(&["cover", "jdk", "21"], &home);
+    ok(&["cover", "go", "1.22"], &home);
+    ok(&["uncover", "--all"], &home);
+    let status = ok(&["status"], &home);
+    assert!(status.contains("No active covers"));
+
+    let _ = fs::remove_dir_all(&home);
+}
