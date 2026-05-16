@@ -70,7 +70,6 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                 return Err(format!("node {} is already installed. Use --force to reinstall.", version));
             }
             let actual = providers::node::NodeProvider::install(version, &dest)?;
-            // Write metadata so list shows it
             let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO: {}", e))?;
             meta.versions.retain(|v| v.version != actual);
             meta.versions.push(InstalledVersion {
