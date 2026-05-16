@@ -127,10 +127,47 @@ fn get_services() -> Vec<ServiceInfo> {
 
 // ── Non-blocking search: spawns thread, returns via event ────────────
 
+fn read_cache(module: &str) -> Option<Vec<String>> {
+    let p = platform::Platform::current();
+    let arch = p.go_arch();
+    let cache_dir = envswitch::infra::fs::envswitch_home().join("cache");
+    let cache_file = cache_dir.join(format!("{}_remote_{}.json", module, arch));
+    if let Ok(meta) = std::fs::metadata(&cache_file) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(elapsed) = modified.elapsed() {
+                let ttl = match module { "php"|"python" => 21600, "node" => 43200, _ => 86400 };
+                if elapsed.as_secs() < ttl {
+                    if let Ok(data) = std::fs::read_to_string(&cache_file) {
+                        if let Ok(versions) = serde_json::from_str::<Vec<String>>(&data) {
+                            return Some(versions);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn write_cache(module: &str, versions: &[String]) {
+    let p = platform::Platform::current();
+    let arch = p.go_arch();
+    let cache_dir = envswitch::infra::fs::envswitch_home().join("cache");
+    let _ = std::fs::create_dir_all(&cache_dir);
+    let cache_file = cache_dir.join(format!("{}_remote_{}.json", module, arch));
+    let _ = std::fs::write(&cache_file, serde_json::to_string(versions).unwrap_or_default());
+}
+
 #[tauri::command]
 fn search_versions(app: tauri::AppHandle, module: String) -> Vec<String> {
+    // Emit cached immediately if available
+    if let Some(cached) = read_cache(&module) {
+        let _ = app.emit("search-results", serde_json::json!({ "module": module, "versions": cached }));
+    }
+
+    // Background refresh
     let m = module.clone();
-    // Return cached if available, then spawn fresh search
+    let app_handle = app.clone();
     std::thread::spawn(move || {
         let versions: Vec<String> = match m.as_str() {
             "jdk" => providers::jdk::JdkProvider::fetch_remote_versions().unwrap_or_default(),
@@ -142,9 +179,10 @@ fn search_versions(app: tauri::AppHandle, module: String) -> Vec<String> {
             "pgsql" => providers::postgresql::PostgresqlProvider::fetch_remote_versions().unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
             _ => vec![],
         };
-        let _ = app.emit("search-results", serde_json::json!({ "module": m, "versions": versions }));
+        if !versions.is_empty() { write_cache(&m, &versions); }
+        let _ = app_handle.emit("search-results", serde_json::json!({ "module": m, "versions": versions }));
     });
-    vec![] // Return empty immediately — results come via event
+    vec![]
 }
 
 // ── Non-blocking install: returns job_id, emits progress via events ──
