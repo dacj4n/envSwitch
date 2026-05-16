@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import './i18n';
 import Sidebar from './components/Sidebar';
+import InstallPage from './pages/Install';
 import VersionsPage from './pages/Versions';
 import ServicesPage from './pages/Services';
 import StatusPage from './pages/Status';
@@ -17,6 +18,7 @@ const App = () => (
       <main className="flex-1 overflow-hidden flex flex-col bg-background">
         <Routes>
           <Route path="/" element={<VersionsPage />} />
+          <Route path="/install/:jobId" element={<InstallPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/logs" element={<LogsPage />} />

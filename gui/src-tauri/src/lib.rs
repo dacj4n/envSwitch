@@ -158,6 +158,13 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
         let mut jobs = JOBS.lock().unwrap();
         jobs.insert(job_id.clone(), JobState { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting...".into(), logs: vec![] });
     }
+    // Open install progress window
+    let url = format!("install/{}", job_id);
+    let _ = tauri::WebviewWindowBuilder::new(&app, &format!("install_{}", job_id), tauri::WebviewUrl::App(url.into()))
+        .title(format!("Installing {} {}", module, version))
+        .inner_size(520.0, 420.0)
+        .build();
+
     let _ = app.emit("job-update", JobProgress { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting install...".into() });
 
     std::thread::spawn(move || {
