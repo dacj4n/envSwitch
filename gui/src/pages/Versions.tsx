@@ -14,7 +14,12 @@ export default function VersionsPage() {
   const [modules, setModules] = useState<ModuleInfo[]>([]);
 
   const refresh = () => {
-    invoke<ModuleInfo[]>('list_modules').then(setModules).catch(console.error);
+    // Sync silently, then list
+    invoke('sync_local').then(() =>
+      invoke<ModuleInfo[]>('list_modules').then(setModules)
+    ).catch(() =>
+      invoke<ModuleInfo[]>('list_modules').then(setModules)
+    );
   };
   useEffect(() => { refresh(); }, []);
 
