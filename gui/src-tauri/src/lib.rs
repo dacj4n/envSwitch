@@ -208,7 +208,7 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
         .inner_size(520.0, 420.0)
         .build();
 
-    let _ = app.emit("job-update", JobProgress { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting install...".into() });
+    let _ = app.emit("job-update", JobProgress { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting install...".into(), phase: "fetch".into(), downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0 });
 
     std::thread::spawn(move || {
         let send = |status: &str, phase: &str, progress: f32, msg: &str, dl: u64, tb: u64, sp: u64, eta: u64| {
@@ -236,11 +236,11 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
 fn uninstall_version(app: tauri::AppHandle, module: String, version: String) -> String {
     let job_id = next_job_id();
     let m = module.clone(); let v = version.clone(); let jid = job_id.clone();
-    let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "uninstall".into(), module: m.clone(), version: v.clone(), status: "running".into(), progress: 0.0, message: "Uninstalling...".into() });
+    let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "uninstall".into(), module: m.clone(), version: v.clone(), status: "running".into(), progress: 0.0, message: "Uninstalling...".into(), phase: "install".into(), downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0 });
 
     std::thread::spawn(move || {
         let send = |status: &str, msg: &str| {
-            let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "uninstall".into(), module: m.clone(), version: v.clone(), status: status.into(), progress: if status == "success" { 1.0 } else { 0.0 }, message: msg.into() });
+            let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "uninstall".into(), module: m.clone(), version: v.clone(), status: status.into(), progress: if status == "success" { 1.0 } else { 0.0 }, message: msg.into(), phase: "done".into(), downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0 });
         };
         match install::uninstall(&m, &v, false) {
             Ok(()) => send("success", &format!("{} {} uninstalled", m, v)),
