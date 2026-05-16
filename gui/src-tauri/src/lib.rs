@@ -145,8 +145,7 @@ fn search_versions(module: String) -> Vec<String> {
             .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
         _ => vec![],
     };
-    // Cap at 200 to avoid UI freeze with 800+ versions (node)
-    if versions.len() > 200 { versions[..200].to_vec() } else { versions }
+    versions
 }
 
 #[tauri::command]
