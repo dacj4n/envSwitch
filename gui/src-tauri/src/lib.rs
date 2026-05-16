@@ -22,6 +22,7 @@ struct JobState {
     status: String, // "running", "success", "failed"
     progress: f32,
     message: String,
+    phase: String,
     logs: Vec<String>,
 }
 
@@ -199,7 +200,7 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
 
     {
         let mut jobs = JOBS.lock().unwrap();
-        jobs.insert(job_id.clone(), JobState { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting...".into(), logs: vec![] });
+        jobs.insert(job_id.clone(), JobState { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting...".into(), phase: "fetching".into(), logs: vec![] });
     }
     // Open install progress window
     let url = format!("install/{}", job_id);
@@ -213,7 +214,7 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
     std::thread::spawn(move || {
         let send = |status: &str, phase: &str, progress: f32, msg: &str, dl: u64, tb: u64, sp: u64, eta: u64| {
             let mut jobs = JOBS.lock().unwrap();
-            if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
+            if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.phase = phase.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
         // Give the install window time to open and register its event listener
@@ -274,7 +275,7 @@ fn get_job_state(job_id: String) -> Option<JobProgress> {
     jobs.get(&job_id).map(|j| JobProgress {
         id: j.id.clone(), kind: j.kind.clone(), module: j.module.clone(),
         version: j.version.clone(), status: j.status.clone(), progress: j.progress,
-        message: j.message.clone(), phase: "running".into(),
+        message: j.message.clone(), phase: j.phase.clone(),
         downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
     })
 }

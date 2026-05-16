@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { XIcon, CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
@@ -19,21 +18,21 @@ export default function InstallPage() {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Poll current state immediately (backend may have started before window opened)
-    invoke<JobUpdate | null>('get_job_state', { jobId }).then(j => {
-      if (j) { setJob(j); setLogs([`[${j.phase}] ${j.message}`]); }
-    });
-
-    const unlisten = listen<JobUpdate>('job-update', (ev) => {
-      if (ev.payload.id !== jobId) return;
-      setJob(ev.payload);
-      setLogs(prev => {
-        const msg = `[${ev.payload.phase}] ${ev.payload.message}`;
-        if (prev[prev.length - 1] === msg) return prev;
-        return [...prev, msg];
-      });
-    });
-    return () => { unlisten.then(fn => fn()); };
+    // Poll backend every second for job state (bypasses event race conditions)
+    const poll = async () => {
+      const j = await invoke<JobUpdate | null>('get_job_state', { jobId });
+      if (j) {
+        setJob(j);
+        setLogs(prev => {
+          const msg = `[${j.phase}] ${j.message}`;
+          if (prev[prev.length - 1] === msg) return prev;
+          return [...prev, msg];
+        });
+      }
+    };
+    poll(); // immediate first poll
+    const timer = setInterval(poll, 1000);
+    return () => clearInterval(timer);
   }, [jobId]);
 
   useEffect(() => {
