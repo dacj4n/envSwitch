@@ -216,24 +216,38 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
-        // Send progress updates with delays so frontend can render each phase
-        for (phase, progress, msg) in &[
-            ("fetch", 0.05f32, format!("Fetching {} {}...", m, v)),
-            ("fetch", 0.10, format!("Resolving download URL...", )),
-            ("download", 0.20, format!("Downloading {} {}...", m, v)),
-            ("download", 0.35, "Downloading (40%)...".into()),
-            ("download", 0.45, "Download complete".into()),
-            ("verify", 0.55, "Verifying SHA256...".into()),
-            ("extract", 0.65, "Extracting archive...".into()),
-            ("install", 0.80, "Installing binaries...".into()),
-            ("install", 0.90, "Finalizing...".into()),
-        ] {
-            send("running", phase, *progress, msg, 0, 0, 0, 0);
-            std::thread::sleep(std::time::Duration::from_millis(300));
-        }
-        match install::install(&m, &v, false) {
-            Ok(()) => send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0),
-            Err(e) => send("failed", "error", 0.0, &format!("Error: {}", e), 0, 0, 0, 0),
+        // Phase 1: Prep (before real work)
+        send("running", "fetch", 0.05, &format!("Preparing to install {} {}...", m, v), 0, 0, 0, 0);
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // Phase 2: Run install in background — send heartbeat during the wait
+        send("running", "download", 0.10, "Downloading and installing (this may take a while)...", 0, 0, 0, 0);
+
+        // Spawn the install, heartbeat while waiting
+        let (tx, rx) = std::sync::mpsc::channel();
+        let m2 = m.clone(); let v2 = v.clone();
+        std::thread::spawn(move || {
+            let result = install::install(&m2, &v2, false);
+            let _ = tx.send(result);
+        });
+
+        // Heartbeat: update progress every 2 seconds while install runs
+        let mut heartbeat = 0.15f32;
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+                Ok(result) => {
+                    match result {
+                        Ok(()) => send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0),
+                        Err(e) => send("failed", "error", heartbeat, &format!("Error: {}", e), 0, 0, 0, 0),
+                    }
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    heartbeat = (heartbeat + 0.03).min(0.85);
+                    send("running", "download", heartbeat, "Still working...", 0, 0, 0, 0);
+                }
+                Err(_) => break,
+            }
         }
     });
 
