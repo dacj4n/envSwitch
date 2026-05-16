@@ -1,8 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { XIcon, CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
+import { CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
 
 interface JobUpdate {
   id: string; kind: string; module: string; version: string;
@@ -26,6 +25,16 @@ export default function InstallPage() {
         setLogs(prev => {
           const msg = `[${j.phase}] ${j.message}`;
           if (prev[prev.length - 1] === msg) return prev;
+          // In-place progress update: curl # bar or percentage, replace last download line
+          const isProgress = /^[#. ]*\d+\.?\d*%/.test(j.message) || /^\d+\.?\d*%/.test(j.message);
+          if (isProgress && prev.length > 0) {
+            const last = prev[prev.length - 1];
+            if (/\[downloading\]/.test(last) && /[#%]/.test(last)) {
+              const updated = [...prev];
+              updated[updated.length - 1] = msg;
+              return updated;
+            }
+          }
           return [...prev, msg];
         });
       }
@@ -39,9 +48,10 @@ export default function InstallPage() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
-  const close = () => getCurrentWindow().close();
   const cancel = () => { invoke('cancel_job', { jobId }); };
   const done = job?.status === 'success' || job?.status === 'failed' || job?.status === 'cancelled';
+  const cancelling = job?.status === 'cancelling';
+  const hideCancel = done || cancelling;
   const pct = Math.round((job?.progress ?? 0) * 100);
   const curIdx = PHASES.indexOf(job?.phase ?? 'fetch');
   const failed = job?.status === 'failed';
@@ -58,46 +68,19 @@ export default function InstallPage() {
             <div className="text-sm font-semibold text-foreground">
               {job ? `${job.module} ${job.version}` : 'Installing...'}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">
-              {job?.status === 'running' ? job?.message || 'Running...' :
-               job?.status === 'success' ? 'Complete' :
-               job?.status === 'failed' ? 'Failed' :
-               job?.status === 'cancelled' ? 'Cancelled' : 'Starting...'}
-            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!done && (
+          {!hideCancel && (
             <button onClick={cancel}
               className="px-2.5 py-1 text-[11px] rounded-md bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 font-medium"
             >Cancel</button>
           )}
-          <button onClick={close} className="p-1 rounded hover:bg-white/5 text-muted-foreground">
-            <XIcon className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
-      {/* Status + progress */}
+      {/* Progress bar + phase steps */}
       <div className="px-5 py-4 border-b border-[#1a2030] shrink-0 space-y-3">
-        <div className="flex items-center gap-2">
-          {!job && <Loader2Icon className="w-4 h-4 text-primary animate-spin" />}
-          {job?.status === 'running' && <Loader2Icon className="w-4 h-4 text-primary animate-spin" />}
-          {job?.status === 'success' && <CheckCircleIcon className="w-4 h-4 text-success" />}
-          {failed && <XCircleIcon className="w-4 h-4 text-destructive" />}
-          {job?.status === 'cancelled' && <XCircleIcon className="w-4 h-4 text-warning" />}
-          <span className={`text-xs font-medium ${
-            job?.status === 'success' ? 'text-success' : failed ? 'text-destructive' : 'text-foreground'
-          }`}>
-            {!job ? 'Initializing...' :
-             job.status === 'running' ? 'Running' :
-             job.status === 'success' ? 'Installed successfully' :
-             job.status === 'failed' ? 'Installation failed' :
-             job.status === 'cancelled' ? 'Cancelled' : job.status}
-          </span>
-          <span className="ml-auto font-mono text-xs text-muted-foreground">{pct}%</span>
-        </div>
-
         {/* Progress bar */}
         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
           <div className={`h-full rounded-full transition-all duration-700 ${

@@ -1,13 +1,22 @@
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 
 use crate::domain::ChecksumType;
 use crate::infra::fs::envswitch_home;
 
 /// Download a file from url to cache_dir, return path to downloaded file.
-/// Returns error string on failure.
+/// If log_tx is provided, curl's stderr progress bar is streamed in real-time.
 pub fn download_file(url: &str, module: &str, version: &str) -> Result<PathBuf, String> {
+    download_file_inner(url, module, version, None)
+}
+
+pub fn download_file_with_log(url: &str, module: &str, version: &str, log_tx: &Sender<String>) -> Result<PathBuf, String> {
+    download_file_inner(url, module, version, Some(log_tx))
+}
+
+fn download_file_inner(url: &str, module: &str, version: &str, log_tx: Option<&Sender<String>>) -> Result<PathBuf, String> {
     let cache_dir = envswitch_home().join("cache").join(module);
     fs::create_dir_all(&cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
 
@@ -18,21 +27,49 @@ pub fn download_file(url: &str, module: &str, version: &str) -> Result<PathBuf, 
         return Ok(dest);
     }
 
-    // Use curl for reliable downloads with progress
-    let status = std::process::Command::new("curl")
-        .args([
-            "-L",
-            "-o", &dest.to_string_lossy(),
-            "-#",
-            url,
-        ])
-        .status()
-        .map_err(|e| format!("curl not found: {}. Please install curl.", e))?;
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(["-L", "--connect-timeout", "15", "--max-time", "0", "-o", &dest.to_string_lossy(), "-#", url]);
+    crate::config::apply_proxy(&mut cmd);
 
-    if !status.success() {
-        // Clean up partial download
-        let _ = fs::remove_file(&dest);
-        return Err(format!("Download failed with exit code: {:?}", status.code()));
+    if let Some(tx) = log_tx {
+        // Pipe stderr to capture the progress bar in real-time
+        cmd.stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn().map_err(|e| format!("curl: {}", e))?;
+        let mut stderr = child.stderr.take().unwrap();
+
+        let mut buf = [0u8; 1];
+        let mut line = String::new();
+        loop {
+            match stderr.read(&mut buf) {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    let ch = buf[0] as char;
+                    if ch == '\r' || ch == '\n' {
+                        let trimmed = line.trim().to_string();
+                        if !trimmed.is_empty() { let _ = tx.send(trimmed); }
+                        line.clear();
+                    } else {
+                        line.push(ch);
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        // Flush any remaining
+        let trimmed = line.trim().to_string();
+        if !trimmed.is_empty() { let _ = tx.send(trimmed); }
+
+        let status = child.wait().map_err(|e| format!("curl wait: {}", e))?;
+        if !status.success() {
+            let _ = fs::remove_file(&dest);
+            return Err(format!("Download failed with exit code: {:?}", status.code()));
+        }
+    } else {
+        let status = cmd.status().map_err(|e| format!("curl not found: {}. Please install curl.", e))?;
+        if !status.success() {
+            let _ = fs::remove_file(&dest);
+            return Err(format!("Download failed with exit code: {:?}", status.code()));
+        }
     }
 
     Ok(dest)

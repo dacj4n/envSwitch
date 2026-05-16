@@ -4,44 +4,85 @@ use crate::providers;
 use chrono::Utc;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 
-
-/// Install a specific version of a module.
+/// Install a specific version of a module (production path).
 pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), String> {
+    let dest = fs::envswitch_home().join("envs").join(module_name).join(version);
+    install_to(module_name, version, &dest, force, true, None, None)
+}
+
+/// Install with log channel for real-time progress (used by Tauri GUI).
+pub fn install_with_log(module_name: &str, version: &str, force: bool, log_tx: &Sender<String>) -> Result<(), String> {
+    let dest = fs::envswitch_home().join("envs").join(module_name).join(version);
+    install_to(module_name, version, &dest, force, true, None, Some(log_tx))
+}
+
+/// Install to a staging directory (no metadata, no "already installed" check against staging).
+/// cancel_token: if set, aborts at checkpoints and returns Err("Cancelled").
+/// log_tx: if set, sends real-time log lines (for GUI progress window).
+pub fn install_staging(module_name: &str, version: &str, staging_dir: &std::path::Path, force: bool, cancel_token: Option<&AtomicBool>, log_tx: Option<&Sender<String>>) -> Result<(), String> {
+    let _ = std::fs::create_dir_all(staging_dir);
+    install_to(module_name, version, staging_dir, force, false, cancel_token, log_tx)
+}
+
+fn cancelled(token: Option<&AtomicBool>) -> bool {
+    token.map(|t| t.load(Ordering::SeqCst)).unwrap_or(false)
+}
+
+fn log_msg(tx: Option<&Sender<String>>, msg: &str) {
+    eprintln!("{}", msg);
+    if let Some(tx) = tx { let _ = tx.send(msg.to_string()); }
+}
+
+fn install_to(module_name: &str, version: &str, dest: &std::path::Path, force: bool, save_meta: bool, cancel_token: Option<&AtomicBool>, log_tx: Option<&Sender<String>>) -> Result<(), String> {
     let _module = crate::module_repo::find_module(module_name)
         .ok_or_else(|| format!("Unknown module: {}", module_name))?;
 
-    let dest = fs::envswitch_home().join("envs").join(module_name).join(version);
-
-    eprintln!("Platform: {}", crate::platform::Platform::current().display());
+    log_msg(log_tx, &format!("Platform: {}", crate::platform::Platform::current().display()));
 
     // Platform compatibility check (before "already installed")
     match module_name {
         _ => {}
     }
 
-    // Check if already installed
-    if dest.exists() && !force {
+    // Check if already installed (only when not staging)
+    if save_meta && dest.exists() && !force {
         return Err(format!(
             "{} {} is already installed. Use --force to reinstall.",
             module_name, version
         ));
     }
 
-    eprintln!("Downloading {} {} ...", module_name, version);
+    if cancelled(cancel_token) { return Err("Cancelled".into()); }
+
+    log_msg(log_tx, &format!("Downloading {} {} ...", module_name, version));
+
+    // Helper: pick download_file or download_file_with_log based on log_tx
+    let dl = |url: &str| -> Result<std::path::PathBuf, String> {
+        if let Some(tx) = log_tx {
+            download::download_file_with_log(url, module_name, version, tx)
+        } else {
+            download::download_file(url, module_name, version)
+        }
+    };
 
     // Dispatch to the correct provider
     match module_name {
         "jdk" => {
-            eprintln!("Querying Azul Zulu for JDK {}...", version);
+            log_msg(log_tx, &format!("Querying Azul Zulu for JDK {}...", version));
             let asset = providers::jdk::JdkProvider::fetch_asset(version)?;
-            eprintln!("Downloading {}...", asset.filename);
-            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            log_msg(log_tx, &format!("Downloading {} from {}", asset.filename, asset.download_url));
+            let archive = dl(&asset.download_url)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
             if !asset.checksum.is_empty() {
-                eprintln!("Verifying SHA256...");
+                log_msg(log_tx, "Verifying SHA256...");
                 download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+                log_msg(log_tx, "SHA256 verified OK");
             }
-            eprintln!("Extracting...");
+            log_msg(log_tx, "Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
@@ -49,15 +90,18 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             fix_exec_permissions(&dest)?;
         }
         "go" => {
-            eprintln!("Querying go.dev for Go {}...", version);
+            log_msg(log_tx, &format!("Querying go.dev for Go {}...", version));
             let asset = providers::go::GoProvider::fetch_asset(version)?;
-            eprintln!("Downloading {}...", asset.version);
-            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            log_msg(log_tx, &format!("Downloading {} from {}", asset.version, asset.download_url));
+            let archive = dl(&asset.download_url)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
             if !asset.checksum.is_empty() {
-                eprintln!("Verifying SHA256...");
+                log_msg(log_tx, "Verifying SHA256...");
                 download::verify_checksum(&archive, &ChecksumType::Sha256, Some(&asset.checksum))?;
+                log_msg(log_tx, "SHA256 verified OK");
             }
-            eprintln!("Extracting...");
+            log_msg(log_tx, "Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
@@ -67,20 +111,26 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
         }
         "node" => {
             let asset = providers::node::NodeProvider::fetch_asset(version)?;
-            let archive = download::download_file(&asset.download_url, module_name, version)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            log_msg(log_tx, &format!("Downloading from {}", asset.download_url));
+            let archive = dl(&asset.download_url)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
             if !asset.checksum_url.is_empty() {
-                let chk_out = Command::new("curl").args(["-sL", &asset.checksum_url]).output()
+                let mut chk_cmd = Command::new("curl");
+                crate::config::apply_proxy(&mut chk_cmd);
+                let chk_out = chk_cmd.args(["-sL", &asset.checksum_url]).output()
                     .map_err(|e| format!("fetch SHASUMS: {}", e))?;
                 let shasums = String::from_utf8_lossy(&chk_out.stdout);
                 let platform = crate::platform::Platform::current();
                 let (node_os, node_arch) = providers::node::node_platform(&platform);
                 let filename = format!("node-v{}-{}-{}.tar.gz", version, node_os, node_arch);
                 if let Some(expected) = shasums.lines().find(|l| l.contains(&filename)).and_then(|l| l.split_whitespace().next()) {
-                    eprintln!("Verifying SHA256...");
+                    log_msg(log_tx, "Verifying SHA256...");
                     download::verify_checksum(&archive, &ChecksumType::Sha256, Some(expected))?;
+                    log_msg(log_tx, "SHA256 verified OK");
                 }
             }
-            eprintln!("Extracting...");
+            log_msg(log_tx, "Extracting...");
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
@@ -88,14 +138,15 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
             fix_exec_permissions(&dest)?;
         }
         "pgsql" => {
-            eprintln!("PostgreSQL uses Homebrew for installation.");
+            log_msg(log_tx, "PostgreSQL uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!("pgsql {} is already installed. Use --force to reinstall.", version));
             }
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            let actual_version = providers::postgresql::PostgresqlProvider::install(version, &dest)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            let actual_version = providers::postgresql::PostgresqlProvider::install_log(version, &dest, log_tx)?;
             let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
             if actual_dest != dest {
                 let _ = std::fs::remove_dir_all(&actual_dest);
@@ -111,19 +162,20 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                     size_bytes: size,
                 });
                 fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
-                eprintln!("pgsql {} installed successfully.", actual_version);
+                log_msg(log_tx, &format!("pgsql {} installed successfully", actual_version));
                 return Ok(());
             }
         }
         "mysql" => {
-            eprintln!("MySQL uses Homebrew for installation.");
+            log_msg(log_tx, "MySQL uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!("mysql {} is already installed. Use --force to reinstall.", version));
             }
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            let actual_version = providers::mysql::MySqlProvider::install(version, &dest)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            let actual_version = providers::mysql::MySqlProvider::install_log(version, &dest, log_tx)?;
             let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
             if actual_dest != dest {
                 let _ = std::fs::remove_dir_all(&actual_dest);
@@ -139,19 +191,20 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                     size_bytes: size,
                 });
                 fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
-                eprintln!("mysql {} installed successfully.", actual_version);
+                log_msg(log_tx, &format!("mysql {} installed successfully", actual_version));
                 return Ok(());
             }
         }
         "python" => {
-            eprintln!("Python uses Homebrew for installation.");
+            log_msg(log_tx, "Python uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!("python {} is already installed. Use --force to reinstall.", version));
             }
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            let actual_version = providers::python::PythonProvider::install(version, &dest)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            let actual_version = providers::python::PythonProvider::install_log(version, &dest, log_tx)?;
             let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
             if actual_dest != dest {
                 let _ = std::fs::remove_dir_all(&actual_dest);
@@ -167,19 +220,20 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                     size_bytes: size,
                 });
                 fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
-                eprintln!("python {} installed successfully.", actual_version);
+                log_msg(log_tx, &format!("python {} installed successfully", actual_version));
                 return Ok(());
             }
         }
         "php" => {
-            eprintln!("PHP uses Homebrew for installation.");
+            log_msg(log_tx, "PHP uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!("php {} is already installed. Use --force to reinstall.", version));
             }
             if dest.exists() {
                 std::fs::remove_dir_all(&dest).map_err(|e| format!("Cannot remove old install: {}", e))?;
             }
-            let actual_version = providers::php::PhpProvider::install(version, &dest)?;
+            if cancelled(cancel_token) { return Err("Cancelled".into()); }
+            let actual_version = providers::php::PhpProvider::install_log(version, &dest, log_tx)?;
             // Use actual version from brew for metadata
             let actual_dest = fs::envswitch_home().join("envs").join(module_name).join(&actual_version);
             if actual_dest != dest {
@@ -197,29 +251,31 @@ pub fn install(module_name: &str, version: &str, force: bool) -> Result<(), Stri
                     size_bytes: size,
                 });
                 fs::save_installed(module_name, &meta).map_err(|e| format!("IO: {}", e))?;
-                eprintln!("php {} installed successfully.", actual_version);
+                log_msg(log_tx, &format!("php {} installed successfully", actual_version));
                 return Ok(());
             }
         }
         _ => return Err(format!("No provider for module: {}", module_name)),
     }
 
-    // Record metadata
-    let size = fs::disk_usage(&dest);
-    let installed = InstalledVersion {
-        module_name: module_name.to_string(),
-        version: version.to_string(),
-        install_path: dest,
-        installed_at: Utc::now(),
-        size_bytes: size,
-    };
+    log_msg(log_tx, &format!("{} {} installed successfully", module_name, version));
 
-    let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
-    meta.versions.retain(|v| v.version != version);
-    meta.versions.push(installed);
-    fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
+    if save_meta {
+        // Record metadata
+        let size = fs::disk_usage(dest);
+        let installed = InstalledVersion {
+            module_name: module_name.to_string(),
+            version: version.to_string(),
+            install_path: dest.to_path_buf(),
+            installed_at: Utc::now(),
+            size_bytes: size,
+        };
 
-    eprintln!("{} {} installed successfully.", module_name, version);
+        let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
+        meta.versions.retain(|v| v.version != version);
+        meta.versions.push(installed);
+        fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
+    }
     Ok(())
 }
 
@@ -296,7 +352,7 @@ pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), St
 
     // For Homebrew-based modules, also uninstall the formula
     match module_name {
-        "mysql" | "pgsql" | "php" | "python" => {
+        "mysql" | "pgsql" | "php" | "python" | "go" | "node" | "jdk" => {
             let formula = brew_formula(module_name, version);
             eprintln!("Uninstalling {} via Homebrew...", formula);
             let _ = std::process::Command::new("brew")
@@ -367,7 +423,7 @@ pub fn list_installed(module_name: &str) -> Result<Vec<InstalledVersion>, String
 }
 
 /// List all installed versions across all modules by scanning the filesystem.
-fn brew_formula(module_name: &str, version: &str) -> String {
+pub fn brew_formula(module_name: &str, version: &str) -> String {
     match module_name {
         "mysql" => {
             if version.starts_with("9.") { "mysql".into() }
@@ -376,6 +432,17 @@ fn brew_formula(module_name: &str, version: &str) -> String {
         "pgsql" => format!("postgresql@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")),
         "php" => format!("php@{}", version.split('.').take(2).collect::<Vec<_>>().join(".")),
         "python" => format!("python@{}", version),
+        // Unversioned Homebrew formulas
+        "go" => "go".into(),
+        "node" => "node".into(),
+        "jdk" => {
+            if version.starts_with("1.8") || version.starts_with("8") {
+                "openjdk@8".into()
+            } else {
+                let major = version.split('.').next().unwrap_or(version);
+                format!("openjdk@{}", major)
+            }
+        }
         _ => format!("{}@{}", module_name, version),
     }
 }

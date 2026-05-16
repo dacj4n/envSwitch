@@ -2,10 +2,11 @@ use envswitch::domain::{CoverScope, ModuleCategory, InstalledMetadata, Installed
 use envswitch::{install, environment, module_repo, service_mgr, platform, providers};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc, atomic::{AtomicBool, Ordering}};
 use tauri::Emitter;
 
 static JOBS: std::sync::LazyLock<Mutex<HashMap<String, JobState>>> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+static CANCEL_TOKENS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn next_job_id() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -209,61 +210,228 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
         .inner_size(520.0, 420.0)
         .build();
 
+    let cancel_token = Arc::new(AtomicBool::new(false));
+    { CANCEL_TOKENS.lock().unwrap().insert(job_id.clone(), cancel_token.clone()); }
+
     let _ = app.emit("job-update", JobProgress { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting install...".into(), phase: "fetch".into(), downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0 });
 
+    let is_download_module = matches!(module.as_str(), "jdk" | "go" | "node");
+
     std::thread::spawn(move || {
+        let cancelled = || cancel_token.load(Ordering::SeqCst);
         let send = |status: &str, phase: &str, progress: f32, msg: &str, dl: u64, tb: u64, sp: u64, eta: u64| {
             let mut jobs = JOBS.lock().unwrap();
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.phase = phase.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
-        // Give the install window time to open and register its event listener
+
+        // Kill child processes spawned by the install
+        let kill_processes = || {
+            // Kill any brew install (formula name varies)
+            let _ = std::process::Command::new("pkill").args(["-9", "-f", "brew.*install"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+            // Kill curl downloading to .envswitch cache (dest path contains .envswitch)
+            let _ = std::process::Command::new("pkill").args(["-9", "-f", "curl.*\\.envswitch"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+            // Kill tar extracting to .envswitch paths
+            let _ = std::process::Command::new("pkill").args(["-9", "-f", "tar.*\\.envswitch"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+        };
+
+        // Clean up: remove install dir, metadata, and homebrew formula
+        let cleanup = |mod_name: &str, ver: &str| {
+            let home = envswitch::infra::fs::envswitch_home();
+            let install_path = home.join("envs").join(mod_name).join(ver);
+            if install_path.exists() { let _ = std::fs::remove_dir_all(&install_path); }
+            if let Ok(mut meta) = envswitch::infra::fs::load_installed(mod_name) {
+                meta.versions.retain(|iv| iv.version != ver);
+                let _ = envswitch::infra::fs::save_installed(mod_name, &meta);
+            }
+            if matches!(mod_name, "mysql" | "pgsql" | "php" | "python" | "go" | "node" | "jdk") {
+                let formula = install::brew_formula(mod_name, ver);
+                let _ = std::process::Command::new("/opt/homebrew/bin/brew")
+                    .args(["uninstall", "--force", "--ignore-dependencies", &formula])
+                    .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+            }
+        };
+
+        // Wait for window to open
         std::thread::sleep(std::time::Duration::from_millis(1000));
+        if cancelled() { send("cancelled", "done", 0.0, "Cancelled", 0, 0, 0, 0); CANCEL_TOKENS.lock().unwrap().remove(&jid); return; }
 
-        // Stage 1: Fetching
-        send("running", "fetching", 0.05, "Resolving download URL...", 0, 0, 0, 0);
-        std::thread::sleep(std::time::Duration::from_millis(400));
-
-        // Stage 2: Downloading (this is where the real work happens)
-        send("running", "downloading", 0.15, "Downloading...", 0, 0, 0, 0);
-
-        // Run install in sub-thread so we can heartbeat
-        let (tx, rx) = std::sync::mpsc::channel();
+        // ── Spawn install in sub-thread with log channel ──
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let (log_tx, log_rx) = std::sync::mpsc::channel();
         let m2 = m.clone(); let v2 = v.clone();
-        std::thread::spawn(move || {
-            let result = install::install(&m2, &v2, false);
-            let _ = tx.send(result);
-        });
 
-        // Heartbeat: slowly advance progress while install runs, but cap at 0.70 until done
-        let mut hb = 0.18f32;
-        loop {
-            match rx.recv_timeout(std::time::Duration::from_secs(2)) {
-                Ok(result) => {
-                    // Stage 3-5: verify + extract + finalize (happens inside install, now done)
-                    match result {
-                        Ok(()) => {
-                            send("running", "verifying", 0.75, "Verifying...", 0, 0, 0, 0);
-                            std::thread::sleep(std::time::Duration::from_millis(300));
-                            send("running", "extracting", 0.85, "Extracting...", 0, 0, 0, 0);
-                            std::thread::sleep(std::time::Duration::from_millis(300));
-                            send("running", "installing", 0.92, "Finalizing...", 0, 0, 0, 0);
-                            std::thread::sleep(std::time::Duration::from_millis(300));
-                            send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
+        // Drain helper: emit any queued log lines as GUI progress
+        let drain_logs = |rx: &std::sync::mpsc::Receiver<String>, hb: f32, phase: &str| {
+            while let Ok(msg) = rx.try_recv() {
+                let lc = msg.to_lowercase();
+                let phase = if lc.contains("download") || lc.contains("curl") { "downloading" }
+                    else if lc.contains("verify") || lc.contains("sha256") { "verifying" }
+                    else if lc.contains("extract") { "extracting" }
+                    else if lc.contains("install") || lc.contains("success") { "installing" }
+                    else if lc.contains("query") || lc.contains("resolve") || lc.contains("platform") { "fetching" }
+                    else { phase };
+                send("running", phase, hb, &msg, 0, 0, 0, 0);
+            }
+        };
+
+        if is_download_module {
+            // ═══ Staging mode (jdk, go, node): install to tmp → atomic rename ═══
+            let home = envswitch::infra::fs::envswitch_home();
+            let staging = home.join("tmp").join(format!("{}_{}_{}", m2, v2, jid));
+            let _ = std::fs::create_dir_all(&staging);
+            let staging2 = staging.clone();
+            let token2 = cancel_token.clone();
+
+            std::thread::spawn(move || {
+                if token2.load(Ordering::SeqCst) {
+                    let _ = result_tx.send((Err("Cancelled".into()), staging2));
+                    return;
+                }
+                let result = install::install_staging(&m2, &v2, &staging2, false, Some(&token2), Some(&log_tx));
+                // Drop log_tx so the receiver knows we're done sending logs
+                drop(log_tx);
+                if token2.load(Ordering::SeqCst) {
+                    let _ = result_tx.send((Err("Cancelled".into()), staging2));
+                } else {
+                    let _ = result_tx.send((result, staging2));
+                }
+            });
+
+            send("running", "fetching", 0.05, "Starting...", 0, 0, 0, 0);
+
+            let mut hb = 0.18f32;
+            let mut cancelling = false;
+            let final_staging: std::path::PathBuf;
+            loop {
+                if cancelled() && !cancelling {
+                    cancelling = true;
+                    kill_processes();
+                    send("cancelling", "downloading", hb, "Cancelling — cleaning up...", 0, 0, 0, 0);
+                }
+                // Drain log messages first
+                drain_logs(&log_rx, hb, "downloading");
+                match result_rx.recv_timeout(std::time::Duration::from_secs(if cancelling { 1 } else { 2 })) {
+                    Ok((result, staging_dir)) => {
+                        // Drain remaining logs
+                        drain_logs(&log_rx, hb, "downloading");
+                        final_staging = staging_dir;
+                        if cancelling || cancelled() {
+                            let _ = std::fs::remove_dir_all(&final_staging);
+                            cleanup(&m, &v);
+                            send("cancelled", "done", 1.0, "Cancelled — staging removed", 0, 0, 0, 0);
+                            break;
                         }
-                        Err(e) => {
-                            send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
+                        match result {
+                            Ok(()) => {
+                                // Atomic rename: staging → envs/{module}/{version}
+                                let final_dest = envswitch::infra::fs::envswitch_home().join("envs").join(&m).join(&v);
+                                if final_dest.exists() { let _ = std::fs::remove_dir_all(&final_dest); }
+                                if let Some(parent) = final_dest.parent() { let _ = std::fs::create_dir_all(parent); }
+                                if let Err(e) = std::fs::rename(&final_staging, &final_dest) {
+                                    send("failed", "error", hb, &format!("Rename failed: {}", e), 0, 0, 0, 0);
+                                    break;
+                                }
+                                // Save metadata
+                                let size = envswitch::infra::fs::disk_usage(&final_dest);
+                                let installed = DomainInstalledVersion {
+                                    module_name: m.clone(), version: v.clone(),
+                                    install_path: final_dest, installed_at: chrono::Utc::now(), size_bytes: size,
+                                };
+                                if let Ok(mut meta) = envswitch::infra::fs::load_installed(&m) {
+                                    meta.versions.retain(|iv| iv.version != v);
+                                    meta.versions.push(installed);
+                                    let _ = envswitch::infra::fs::save_installed(&m, &meta);
+                                }
+                                // Real log messages were already emitted via drain_logs
+                                send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
+                            }
+                            Err(e) => {
+                                let _ = std::fs::remove_dir_all(&final_staging);
+                                send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
+                            }
                         }
+                        break;
                     }
-                    break;
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        if cancelling {
+                            kill_processes();
+                            continue;
+                        }
+                        hb = (hb + 0.03).min(0.65);
+                        send("running", "downloading", hb, "Downloading...", 0, 0, 0, 0);
+                    }
+                    Err(_) => {
+                        if cancelling {
+                            // Staging dir path unknown (channel broken), fallback cleanup
+                            cleanup(&m, &v);
+                            send("cancelled", "done", 1.0, "Cancelled — cleaned up", 0, 0, 0, 0);
+                        }
+                        break;
+                    }
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    hb = (hb + 0.03).min(0.65);
-                    send("running", "downloading", hb, "Downloading...", 0, 0, 0, 0);
+            }
+        } else {
+            // ═══ Brew mode (php, python, mysql, pgsql): direct install + uninstall on cancel ═══
+            let token3 = cancel_token.clone();
+            std::thread::spawn(move || {
+                if token3.load(Ordering::SeqCst) {
+                    let _ = result_tx.send((Err("Cancelled".into()), std::path::PathBuf::new()));
+                    return;
                 }
-                Err(_) => break,
+                let result = install::install_with_log(&m2, &v2, false, &log_tx);
+                drop(log_tx);
+                if token3.load(Ordering::SeqCst) {
+                    let _ = result_tx.send((Err("Cancelled".into()), std::path::PathBuf::new()));
+                } else {
+                    let _ = result_tx.send((result, std::path::PathBuf::new()));
+                }
+            });
+
+            send("running", "fetching", 0.05, "Starting...", 0, 0, 0, 0);
+
+            let mut hb = 0.18f32;
+            let mut cancelling = false;
+            loop {
+                if cancelled() && !cancelling {
+                    cancelling = true;
+                    kill_processes();
+                    send("cancelling", "downloading", hb, "Cancelling — cleaning up...", 0, 0, 0, 0);
+                }
+                drain_logs(&log_rx, hb, "downloading");
+                match result_rx.recv_timeout(std::time::Duration::from_secs(if cancelling { 1 } else { 2 })) {
+                    Ok((result, _staging)) => {
+                        drain_logs(&log_rx, hb, "downloading");
+                        if cancelling || cancelled() {
+                            cleanup(&m, &v);
+                            send("cancelled", "done", 1.0, "Cancelled — installation cleaned up", 0, 0, 0, 0);
+                            break;
+                        }
+                        match result {
+                            Ok(()) => {
+                                send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
+                            }
+                            Err(e) => {
+                                send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
+                            }
+                        }
+                        break;
+                    }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        if cancelling {
+                            kill_processes();
+                            continue;
+                        }
+                        hb = (hb + 0.03).min(0.65);
+                    }
+                    Err(_) => {
+                        if cancelling { cleanup(&m, &v); send("cancelled", "done", 1.0, "Cancelled — cleaned up", 0, 0, 0, 0); }
+                        break;
+                    }
+                }
             }
         }
+        CANCEL_TOKENS.lock().unwrap().remove(&jid);
     });
 
     job_id
@@ -282,15 +450,19 @@ fn get_job_state(job_id: String) -> Option<JobProgress> {
 
 #[tauri::command]
 fn cancel_job(app: tauri::AppHandle, job_id: String) -> Result<String, String> {
+    // Set cancellation token so the install thread aborts and cleans up
+    if let Some(token) = CANCEL_TOKENS.lock().unwrap().get(&job_id) {
+        token.store(true, Ordering::SeqCst);
+    }
     let mut jobs = JOBS.lock().unwrap();
     if let Some(j) = jobs.get_mut(&job_id) {
-        j.status = "cancelled".into();
-        j.message = "Cancelled by user".into();
+        j.status = "cancelling".into();
+        j.message = "Cancelling...".into();
         let _ = app.emit("job-update", JobProgress {
             id: job_id.clone(), kind: j.kind.clone(), module: j.module.clone(),
-            version: j.version.clone(), status: "cancelled".into(), progress: j.progress,
-            message: "Cancelled".into(), phase: "error".into(),
-            downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+            version: j.version.clone(), status: "cancelling".into(), progress: j.progress,
+            message: "Cancelling — cleaning up...".into(), phase: j.phase.clone(),
+                        downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
         });
     }
     Ok(format!("Job {} cancelled", job_id))
@@ -341,18 +513,47 @@ fn link_module(module: String, version: String, path: String) -> Result<String, 
 fn get_platform() -> String { platform::Platform::current().display().to_string() }
 
 #[tauri::command]
+fn get_proxy() -> Option<String> { envswitch::config::get_proxy() }
+
+#[tauri::command]
+fn set_proxy(proxy: String) { envswitch::config::set_proxy(&proxy); }
+
+#[tauri::command]
 fn sync_local() -> Vec<SyncResult> {
     let mut results = Vec::new();
     let home = envswitch::infra::fs::envswitch_home(); let envs_dir = home.join("envs");
-    let mut link = |module: &str, version: &str, src: std::path::PathBuf, src_label: &str| {
+
+    // Helper: get version from binary output
+    fn bin_version(bin: &str, args: &[&str], trim_prefix: &str) -> Option<String> {
+        std::process::Command::new(bin).args(args).output().ok().and_then(|o| {
+            let ver = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            let v = ver.trim_start_matches(trim_prefix).split_whitespace().next()?.to_string();
+            if v.is_empty() { None } else { Some(v) }
+        })
+    }
+
+    // Link a full install directory: envs/{module}/{version} -> src (must have bin/)
+    fn link_dir(results: &mut Vec<SyncResult>, envs_dir: &std::path::Path, module: &str, version: &str, src: &std::path::Path, src_label: &str) {
         let dest = envs_dir.join(module).join(version);
         if !dest.exists() && src.join("bin").exists() {
             let _ = std::fs::create_dir_all(dest.parent().unwrap());
-            if std::os::unix::fs::symlink(&src, &dest).is_ok() {
+            if std::os::unix::fs::symlink(src, &dest).is_ok() {
                 results.push(SyncResult { module: module.into(), version: version.into(), path: src.display().to_string(), source: src_label.into() });
             }
         }
-    };
+    }
+
+    // Link a single binary: envs/{module}/{version}/bin/{bin_name} -> bin_path
+    fn link_bin(results: &mut Vec<SyncResult>, envs_dir: &std::path::Path, module: &str, version: &str, bin_path: &std::path::Path, bin_name: &str, src_label: &str) {
+        let dest = envs_dir.join(module).join(version);
+        if !dest.exists() {
+            let _ = std::fs::create_dir_all(dest.join("bin"));
+            std::os::unix::fs::symlink(bin_path, dest.join("bin").join(bin_name)).ok();
+            results.push(SyncResult { module: module.into(), version: version.into(), path: bin_path.parent().map(|p| p.display().to_string()).unwrap_or_default(), source: src_label.into() });
+        }
+    }
+
+    // ── System JDK (macOS /Library/Java) ──
     let jvm_dir = std::path::PathBuf::from("/Library/Java/JavaVirtualMachines");
     if let Ok(entries) = std::fs::read_dir(&jvm_dir) {
         for e in entries.flatten() {
@@ -360,46 +561,100 @@ fn sync_local() -> Vec<SyncResult> {
             let h = e.path().join("Contents").join("Home");
             if h.join("bin").join("java").exists() {
                 let ver = name.trim_start_matches("jdk").trim_start_matches("jdk-").trim_end_matches(".jdk").to_string();
-                if !ver.is_empty() { link("jdk", &ver, h, "system"); }
+                if !ver.is_empty() { link_dir(&mut results, &envs_dir, "jdk", &ver, &h, "system"); }
             }
         }
     }
-    let brew_prefix = std::path::PathBuf::from("/opt/homebrew/opt");
+
+    // ── Homebrew versioned formulas (php@8.3, mysql@8.0, etc.) ──
+    let brew_opt = std::path::PathBuf::from("/opt/homebrew/opt");
     for (module, prefix) in &[("php", "php@"), ("python", "python@"), ("mysql", "mysql@"), ("pgsql", "postgresql@")] {
-        if let Ok(entries) = std::fs::read_dir(&brew_prefix) {
+        if let Ok(entries) = std::fs::read_dir(&brew_opt) {
             for e in entries.flatten() {
                 let name = e.file_name().to_string_lossy().to_string();
                 if name.starts_with(prefix) {
                     let ver = name.strip_prefix(prefix).unwrap_or(&name).to_string();
-                    if !ver.is_empty() && e.path().join("bin").exists() { link(module, &ver, e.path(), "homebrew"); }
+                    if !ver.is_empty() && e.path().join("bin").exists() { link_dir(&mut results, &envs_dir, module, &ver, &e.path(), "homebrew"); }
                 }
             }
         }
     }
+
+    // ── Homebrew unversioned packages (go, node) ──
+    for (module, brew_name, bin_name, version_args, trim_pfx) in &[
+        ("go",   "go",   "go",   &["version"][..],   "go version go"),
+        ("node", "node", "node", &["--version"][..], "v"),
+    ] {
+        let opt_dir = brew_opt.join(brew_name);
+        let bin = opt_dir.join("bin").join(bin_name);
+        if bin.exists() {
+            if let Some(ver) = bin_version(&bin.display().to_string(), version_args, trim_pfx) {
+                link_dir(&mut results, &envs_dir, module, &ver, &opt_dir, "homebrew");
+            }
+        }
+    }
+
+    // ── Homebrew OpenJDK ──
+    if let Ok(entries) = std::fs::read_dir(&brew_opt) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with("openjdk") {
+                let ver = name.strip_prefix("openjdk@").unwrap_or_else(|| name.strip_prefix("openjdk").unwrap_or(&name));
+                let ver = ver.to_string();
+                let java_home = e.path().join("libexec").join("openjdk.jdk").join("Contents").join("Home");
+                let effective = if java_home.join("bin").join("java").exists() { java_home } else { e.path() };
+                if !ver.is_empty() && effective.join("bin").exists() { link_dir(&mut results, &envs_dir, "jdk", &ver, &effective, "homebrew"); }
+            }
+        }
+    }
+
+    // ── fnm Node versions ──
     let fnm_dir = dirs::home_dir().unwrap_or_default().join(".local/share/fnm/node-versions");
     if let Ok(entries) = std::fs::read_dir(&fnm_dir) {
         for e in entries.flatten() {
             let inst = e.path().join("installation");
             if inst.join("bin").join("node").exists() {
-                link("node", e.file_name().to_string_lossy().trim_start_matches('v'), inst, "fnm");
+                link_dir(&mut results, &envs_dir, "node", &e.file_name().to_string_lossy().trim_start_matches('v'), &inst, "fnm");
             }
         }
     }
+
+    // ── nvm Node versions ──
+    let nvm_dir = dirs::home_dir().unwrap_or_default().join(".nvm/versions/node");
+    if let Ok(entries) = std::fs::read_dir(&nvm_dir) {
+        for e in entries.flatten() {
+            let ver = e.file_name().to_string_lossy().to_string();
+            if e.path().join("bin").join("node").exists() && !ver.is_empty() {
+                link_dir(&mut results, &envs_dir, "node", ver.trim_start_matches('v'), &e.path(), "nvm");
+            }
+        }
+    }
+
+    // ── System Python ──
     let sys_python = std::path::PathBuf::from("/usr/bin/python3");
     if sys_python.exists() {
         if let Ok(out) = std::process::Command::new(&sys_python).arg("--version").output() {
             let ver = String::from_utf8_lossy(&out.stdout).trim().trim_start_matches("Python ").to_string();
             if !ver.is_empty() {
-                let dest = envs_dir.join("python").join(&ver);
+                link_bin(&mut results, &envs_dir, "python", &ver, &sys_python, "python3", "system");
+                // Also link as 'python'
+                let dest = envs_dir.join("python").join(&ver).join("bin").join("python");
                 if !dest.exists() {
-                    let _ = std::fs::create_dir_all(dest.join("bin"));
-                    std::os::unix::fs::symlink(&sys_python, dest.join("bin").join("python3")).ok();
-                    std::os::unix::fs::symlink(&sys_python, dest.join("bin").join("python")).ok();
-                    results.push(SyncResult { module: "python".into(), version: ver, path: "/usr/bin".into(), source: "system".into() });
+                    std::os::unix::fs::symlink("python3", &dest).ok();
                 }
             }
         }
     }
+
+    // ── System Go (/usr/local/go/bin/go) ──
+    let sys_go = std::path::PathBuf::from("/usr/local/go/bin/go");
+    if sys_go.exists() {
+        if let Some(ver) = bin_version(&sys_go.display().to_string(), &["version"], "go version go") {
+            let go_root = std::path::PathBuf::from("/usr/local/go");
+            link_dir(&mut results, &envs_dir, "go", &ver, &go_root, "system");
+        }
+    }
+
     results
 }
 
@@ -417,6 +672,7 @@ pub fn run() {
             list_modules, cover_module, uncover_module, uncover_all_modules, get_status,
             start_service, stop_service, get_services, get_platform,
             sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job, get_job_state,
+            get_proxy, set_proxy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

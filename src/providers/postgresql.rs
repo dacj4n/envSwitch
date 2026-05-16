@@ -10,9 +10,10 @@ pub struct PostgresqlProvider;
 
 impl PostgresqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew_cmd = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
-        let output = Command::new(brew_cmd)
-            .args(["search", "postgresql"])
+        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let mut cmd = Command::new(brew_path);
+        crate::config::apply_proxy(&mut cmd);
+        let output = cmd.args(["search", "postgresql"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
 
@@ -47,18 +48,21 @@ impl PostgresqlProvider {
     }
 
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
+        Self::install_log(version, dest, None)
+    }
+    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
         let formula = if version.contains('.') {
             format!("postgresql@{}", version)
         } else {
             format!("postgresql@{}", version)
         };
 
-        crate::providers::homebrew::brew_ensure(&formula)?;
+        crate::providers::homebrew::brew_ensure_log(&formula, log_tx)?;
         let actual = crate::providers::homebrew::brew_version(&formula)?;
         let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
         let _ = std::fs::create_dir_all(dest);
 
-        for dir in &["bin", "lib", "share"] {
+        for dir in &["bin", "lib", "share", "libexec"] {
             crate::providers::homebrew::brew_symlink_dir(&brew_path, dest, dir)?;
         }
 

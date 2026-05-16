@@ -1,8 +1,14 @@
 //! Shared Homebrew helpers for PHP, Python, MySQL, PostgreSQL providers.
 
+pub fn brew_cmd() -> std::process::Command {
+    let mut cmd = std::process::Command::new("brew");
+    crate::config::apply_proxy(&mut cmd);
+    cmd
+}
+
 /// Check that brew is available. On Linux without brew, suggest Linuxbrew.
 pub fn check_brew() -> Result<(), String> {
-    let ok = std::process::Command::new("brew")
+    let ok = brew_cmd()
         .arg("--version")
         .output()
         .map_or(false, |o| o.status.success());
@@ -31,35 +37,64 @@ Homebrew is required for this module. Install from:
 
 /// Run brew install only if formula is not already installed.
 pub fn brew_ensure(formula: &str) -> Result<(), String> {
+    brew_ensure_log(formula, None)
+}
+
+/// brew install with optional log streaming (pipes stdout/stderr to log_tx).
+pub fn brew_ensure_log(formula: &str, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<(), String> {
     check_brew()?;
     if brew_installed(formula) {
-        eprintln!("{} already installed, linking...", formula);
+        let msg = format!("{} already installed, linking...", formula);
+        if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+        eprintln!("{}", msg);
         return Ok(());
     }
-    eprintln!("Installing {} via Homebrew...", formula);
-    let status = std::process::Command::new("brew").args(["install", formula])
-        .stdout(std::process::Stdio::inherit()).stderr(std::process::Stdio::inherit())
-        .status().map_err(|e| format!("brew: {}", e))?;
-    if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+    let msg = format!("brew install {}", formula);
+    if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+    eprintln!("{}", msg);
+    let mut cmd = brew_cmd();
+    cmd.args(["install", formula]);
+    if let Some(tx) = log_tx {
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn().map_err(|e| format!("brew spawn: {}", e))?;
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let tx1 = tx.clone(); let tx2 = tx.clone();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stdout).lines().flatten() { let _ = tx1.send(line); }
+        });
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::BufReader::new(stderr).lines().flatten() { let _ = tx2.send(line); }
+        });
+        let status = child.wait().map_err(|e| format!("brew wait: {}", e))?;
+        if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+    } else {
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
+        let status = cmd.status().map_err(|e| format!("brew: {}", e))?;
+        if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+    }
     Ok(())
 }
 
 pub fn brew_installed(formula: &str) -> bool {
-    // brew list --formula <name> succeeds only if installed
-    std::process::Command::new("brew")
+    brew_cmd()
         .args(["list", "--formula", formula])
         .output()
         .map_or(false, |o| o.status.success())
 }
 
 pub fn brew_prefix(formula: &str) -> Result<String, String> {
-    let output = std::process::Command::new("brew").args(["--prefix", formula]).output()
+    let output = brew_cmd().args(["--prefix", formula]).output()
         .map_err(|e| format!("brew --prefix: {}", e))?;
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 pub fn brew_version(formula: &str) -> Result<String, String> {
-    let output = std::process::Command::new("brew").args(["info", "--json=v2", formula]).output()
+    let output = brew_cmd().args(["info", "--json=v2", formula]).output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
         .map_err(|_| "brew info parse error".to_string())?;

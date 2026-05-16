@@ -1,5 +1,6 @@
 // Module declarations (binary target — duplicated from lib.rs for compilation)
 mod cli;
+mod config;
 mod domain;
 mod environment;
 mod infra;

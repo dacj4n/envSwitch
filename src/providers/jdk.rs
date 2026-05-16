@@ -46,7 +46,11 @@ impl JdkProvider {
         }
 
         let mut sorted: Vec<String> = all.into_iter().collect();
-        sorted.sort_by(|a, b| b.cmp(a));
+        sorted.sort_by(|a, b| {
+            let va: Vec<u32> = a.split('.').filter_map(|s| s.parse().ok()).collect();
+            let vb: Vec<u32> = b.split('.').filter_map(|s| s.parse().ok()).collect();
+            vb.cmp(&va) // newest first
+        });
 
         // Cache for 1 hour
         write_remote_cache(&platform, &sorted);
@@ -124,8 +128,9 @@ fn fetch_azul_packages(platform: &Platform, java_version: Option<u32>) -> Result
         url.push_str(&format!("&java_version={}", jv));
     }
 
-    let out = std::process::Command::new("curl")
-        .args(["-sL", "--connect-timeout", "10", &url])
+    let mut cmd = std::process::Command::new("curl");
+    crate::config::apply_proxy(&mut cmd);
+    let out = cmd.args(["-sL", "--connect-timeout", "10", &url])
         .output()
         .map_err(|e| format!("curl: {}", e))?;
 

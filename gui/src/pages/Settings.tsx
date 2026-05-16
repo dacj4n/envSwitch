@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import TopBar from '../components/TopBar';
 import { GlobeIcon, NetworkIcon, TerminalIcon, CopyIcon } from 'lucide-react';
@@ -19,8 +20,12 @@ const CLI_EXAMPLES = [
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
-  const [proxy, setProxy] = useState(localStorage.getItem('envswitch_proxy') || '');
+  const [proxy, setProxy] = useState('');
   const [language, setLanguage] = useState(i18n.language?.startsWith('zh') ? 'zh' : 'en');
+
+  useEffect(() => {
+    invoke<string | null>('get_proxy').then(p => setProxy(p || '')).catch(() => {});
+  }, []);
 
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
@@ -67,7 +72,7 @@ export default function SettingsPage() {
               <input type="text" value={proxy} onChange={e => setProxy(e.target.value)}
                 placeholder="http://127.0.0.1:7890"
                 className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary" />
-              <button onClick={() => { localStorage.setItem('envswitch_proxy', proxy); toast.success('Saved'); }}
+              <button onClick={() => { invoke('set_proxy', { proxy }); toast.success('Proxy saved — takes effect on next install'); }}
                 className="px-4 py-2 rounded-md bg-primary/15 text-primary border border-primary/30 text-sm font-medium hover:bg-primary/20">Save</button>
             </div>
           </div>

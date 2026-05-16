@@ -8,8 +8,9 @@ pub struct PythonProvider;
 impl PythonProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
         let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
-        let output = std::process::Command::new(brew)
-            .args(["search", "python"])
+        let mut cmd = std::process::Command::new(brew);
+        crate::config::apply_proxy(&mut cmd);
+        let output = cmd.args(["search", "python"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
 
@@ -48,18 +49,33 @@ impl PythonProvider {
     }
 
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
+        Self::install_log(version, dest, None)
+    }
+    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
         let formula = format!("python@{}", version);
 
-        eprintln!("Installing {} via Homebrew...", formula);
-        let status = std::process::Command::new("brew")
-            .args(["install", "--force", &formula])
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .map_err(|e| format!("brew: {}", e))?;
-
-        if !status.success() {
-            eprintln!("brew link had conflicts (ignored)");
+        let msg = format!("brew install --force {}", formula);
+        if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+        eprintln!("{}", msg);
+        let mut cmd = std::process::Command::new("brew");
+        crate::config::apply_proxy(&mut cmd);
+        cmd.args(["install", "--force", &formula]);
+        if let Some(tx) = log_tx {
+            cmd.stdout(std::process::Stdio::piped());
+            cmd.stderr(std::process::Stdio::piped());
+            let mut child = cmd.spawn().map_err(|e| format!("brew: {}", e))?;
+            let stdout = child.stdout.take().unwrap();
+            let stderr = child.stderr.take().unwrap();
+            let tx1 = tx.clone(); let tx2 = tx.clone();
+            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stdout).lines().flatten() { let _ = tx1.send(l); } });
+            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stderr).lines().flatten() { let _ = tx2.send(l); } });
+            let status = child.wait().map_err(|e| format!("brew wait: {}", e))?;
+            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+        } else {
+            cmd.stdout(std::process::Stdio::inherit());
+            cmd.stderr(std::process::Stdio::inherit());
+            let status = cmd.status().map_err(|e| format!("brew: {}", e))?;
+            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
         }
 
         // Get actual version
@@ -101,8 +117,9 @@ impl PythonProvider {
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
-    let output = std::process::Command::new("brew")
-        .args(["info", "--json=v2", formula])
+    let mut cmd = std::process::Command::new("brew");
+    crate::config::apply_proxy(&mut cmd);
+    let output = cmd.args(["info", "--json=v2", formula])
         .output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))

@@ -123,8 +123,9 @@ fn go_file_platform(filename: &str) -> Option<String> {
 }
 
 fn fetch_json() -> Result<Vec<GoVersion>, String> {
-    let output = std::process::Command::new("curl")
-        .args(["-sL", "https://go.dev/dl/?mode=json&include=all"])
+    let mut cmd = std::process::Command::new("curl");
+    crate::config::apply_proxy(&mut cmd);
+    let output = cmd.args(["-sL", "https://go.dev/dl/?mode=json&include=all"])
         .output()
         .map_err(|e| format!("curl failed: {}", e))?;
     if !output.status.success() { return Err("Failed to fetch Go versions".into()); }

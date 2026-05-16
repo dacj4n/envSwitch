@@ -214,7 +214,7 @@ export default function VersionsPage() {
                     </div>
                     {results.length > 0 && (
                       <div className="max-h-64 overflow-y-auto">
-                        {results.slice(0, 100).map(ver => {
+                        {results.slice(0, 300).map(ver => {
                           // Skip if exact match or if installed version starts with this (8.0 is covered by 8.0.46)
                           if (installedSet.has(ver)) return null;
                           if (m.versions.some(iv => iv.startsWith(ver + '.') || iv === ver)) return null;

@@ -21,8 +21,9 @@ pub struct NodeAsset {
 
 impl NodeProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let output = Command::new("curl")
-            .args(["-sL", "https://nodejs.org/dist/index.json"])
+        let mut cmd = Command::new("curl");
+        crate::config::apply_proxy(&mut cmd);
+        let output = cmd.args(["-sL", "https://nodejs.org/dist/index.json"])
             .output()
             .map_err(|e| format!("curl: {}", e))?;
 
@@ -55,8 +56,9 @@ impl NodeProvider {
         let filename = format!("node-v{}-{}-{}.tar.gz", version, os, arch);
         let download_url = format!("https://nodejs.org/dist/v{}/{}", version, filename);
 
-        let output = Command::new("curl")
-            .args(["-sL", &format!("https://nodejs.org/dist/v{}/SHASUMS256.txt", version)])
+        let mut cmd = Command::new("curl");
+        crate::config::apply_proxy(&mut cmd);
+        let output = cmd.args(["-sL", &format!("https://nodejs.org/dist/v{}/SHASUMS256.txt", version)])
             .output()
             .map_err(|_| "failed to fetch SHASUMS".to_string())?;
 
