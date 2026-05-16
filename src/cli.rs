@@ -141,4 +141,14 @@ pub enum Commands {
         /// on | off
         state: String,
     },
+
+    /// Register an existing installation path as an envswitch version
+    Link {
+        /// Module name
+        module: String,
+        /// Version label (e.g. "8.2", "5.6.40")
+        version: String,
+        /// Path to the installed software root (containing bin/)
+        path: String,
+    },
 }

@@ -67,6 +67,7 @@ fn main() {
         Commands::InitProject => project::init_project(&std::env::current_dir().unwrap()),
         Commands::Init { shell } => cmd_init(&shell),
         Commands::CdHook { state } => cmd_cd_hook(&state),
+        Commands::Link { module, version, path } => cmd_link(&module, &version, &path),
     };
 
     if let Err(e) = result {
@@ -322,6 +323,50 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
         .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
     eprintln!("Source line added to end of {}", zshrc.display());
     eprintln!("Shell integration ready. Run: source ~/.zshrc");
+    Ok(())
+}
+
+fn cmd_link(module_name: &str, version: &str, path: &str) -> Result<(), String> {
+    let src = std::path::PathBuf::from(path);
+    if !src.exists() {
+        return Err(format!("Path not found: {}", path));
+    }
+    if !src.join("bin").exists() && !src.join("Contents").join("Home").join("bin").exists() {
+        return Err(format!("No bin/ directory found at {}. Expected a software root.", path));
+    }
+
+    let dest = infra::fs::envswitch_home().join("envs").join(module_name).join(version);
+    if dest.exists() {
+        return Err(format!("{} {} is already installed at {}", module_name, version, dest.display()));
+    }
+
+    let _ = std::fs::create_dir_all(dest.parent().unwrap());
+    std::os::unix::fs::symlink(&src, &dest)
+        .map_err(|e| format!("symlink: {}", e))?;
+
+    // Write metadata
+    let meta_path = infra::fs::envswitch_home().join("envs").join(module_name).join("metadata.json");
+    let mut meta = if meta_path.exists() {
+        serde_json::from_str::<crate::domain::InstalledMetadata>(
+            &std::fs::read_to_string(&meta_path).unwrap_or_default()
+        ).unwrap_or(crate::domain::InstalledMetadata { versions: vec![] })
+    } else {
+        crate::domain::InstalledMetadata { versions: vec![] }
+    };
+    meta.versions.retain(|v| v.version != version);
+    meta.versions.push(crate::domain::InstalledVersion {
+        module_name: module_name.to_string(),
+        version: version.to_string(),
+        install_path: dest.clone(),
+        installed_at: chrono::Utc::now(),
+        size_bytes: 0,
+    });
+    let _ = std::fs::create_dir_all(meta_path.parent().unwrap());
+    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
+        .map_err(|e| format!("write metadata: {}", e))?;
+
+    eprintln!("{} {} linked from {}", module_name, version, src.display());
+    eprintln!("Now run: envswitch cover {} {}", module_name, version);
     Ok(())
 }
 
