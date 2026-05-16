@@ -41,21 +41,10 @@ impl NodeProvider {
         Ok(format!("v{}", ver))
     }
 
-    /// Switch Node version: run fnm use + output fnm env for immediate effect.
+    /// Output fnm use command (eval'd by shell function for immediate effect).
     pub fn cover_script(version: &str) -> Result<String, String> {
         let ver = version.trim_start_matches('v');
-        // Tell fnm to switch
-        let use_out = Command::new("fnm")
-            .args(["use", ver])
-            .output()
-            .map_err(|e| format!("fnm use: {}", e))?;
-        eprintln!("{}", String::from_utf8_lossy(&use_out.stdout).trim());
-
-        // Output fnm env + hash -r for immediate effect
-        let env_out = Command::new("fnm")
-            .arg("env")
-            .output()
-            .map_err(|e| format!("fnm env: {}", e))?;
-        Ok(format!("{}\nhash -r\n", String::from_utf8_lossy(&env_out.stdout)))
+        // fnm use handles everything — shell function will eval this
+        Ok(format!("fnm use {}", ver))
     }
 }
