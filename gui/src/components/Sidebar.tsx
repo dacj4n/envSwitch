@@ -1,16 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayersIcon, DatabaseIcon, ActivityIcon, ScrollTextIcon, HeartPulseIcon, SettingsIcon, ZapIcon } from 'lucide-react';
+import { LayersIcon, DatabaseIcon, ActivityIcon, ScrollTextIcon, HeartPulseIcon, SettingsIcon, ZapIcon, Loader2Icon } from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
 export default function Sidebar() {
   const { t } = useTranslation();
   const location = useLocation();
   const [platform, setPlatform] = useState('');
+  const [jobCount, setJobCount] = useState(0);
 
   useEffect(() => {
     invoke<string>('get_platform').then(setPlatform).catch(() => {});
+    const unlisten = listen<{status: string}>('job-update', () => {
+      setJobCount(c => c + 1);
+      // Decrement after 3s (job visual feedback)
+      setTimeout(() => setJobCount(c => Math.max(0, c - 1)), 3000);
+    });
+    return () => { unlisten.then(fn => fn()); };
   }, []);
 
   const NAV_ITEMS = [
@@ -58,6 +66,14 @@ export default function Sidebar() {
           <SettingsIcon className="w-4 h-4 text-muted-foreground" />
           {t('nav.settings')}
         </Link>
+
+        {/* Job indicator */}
+        {jobCount > 0 && (
+          <div className="mt-1 px-3 py-2 rounded-md bg-sidebar-accent/50 flex items-center gap-2">
+            <Loader2Icon className="w-3.5 h-3.5 text-primary animate-spin" />
+            <span className="text-xs text-sidebar-foreground">{jobCount} Job{jobCount > 1 ? 's' : ''}</span>
+          </div>
+        )}
       </div>
     </aside>
   );
