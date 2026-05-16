@@ -1,7 +1,20 @@
+[workspace]
+members = [".", "gui/src-tauri"]
+default-members = [".", "gui/src-tauri"]
+
 [package]
 name = "envswitch"
 version = "0.1.0"
 edition = "2021"
+default-run = "envswitch"
+
+[lib]
+name = "envswitch"
+path = "src/lib.rs"
+
+[[bin]]
+name = "envswitch"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
