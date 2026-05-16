@@ -3,18 +3,18 @@
 # envSwitch
 
 Fast development environment version manager for macOS and Linux.  
-CLI + Desktop GUI (Tauri v2). Zero Docker, zero compilation.
+CLI + Desktop GUI (Tauri v2 + React + Tailwind). Zero Docker, zero compilation.
 
 ```bash
 $ envswitch search jdk
-  21.0.11+10.0.LTS 17.0.19+10  8.0.492
+  21.0.11  17.0.19  8.0.492
 
-$ envswitch install jdk 21.0.11+10.0.LTS
-$ envswitch cover jdk 21.0.11+10.0.LTS
+$ envswitch install jdk 21.0.11
+$ envswitch cover jdk 21.0.11
 $ java -version  # OpenJDK 21 ✓
 
-$ envswitch cover go 1.25.10
-$ go version     # Go 1.25.10 ✓
+$ envswitch cover go 1.26.3
+$ go version     # Go 1.26.3 ✓
 ```
 
 ## Why envSwitch?
@@ -28,6 +28,7 @@ $ go version     # Go 1.25.10 ✓
 | **Services** | MySQL, PostgreSQL | Yes | No | Yes |
 | **GUI** | Yes (Tauri v2) | — | — | Yes |
 | **Footprint** | ~3MB | GBs | ~50MB | ~200MB |
+| **i18n** | Chinese / English | — | — | — |
 
 ## Install
 
@@ -46,11 +47,12 @@ Or build the GUI:
 
 ```bash
 cd gui
+npm install
 npx tauri build
 open target/release/bundle/macos/envswitch.app
 ```
 
-Requirements: `curl`, `rust`, [Homebrew](https://brew.sh) (for php/python/mysql/pgsql), `fnm` (optional, for node).
+Requirements: `curl`, `rust`, [Homebrew](https://brew.sh) (for php/python/mysql/pgsql), `fnm`/`nvm` (optional, for node).
 
 ### Linux
 
@@ -65,10 +67,10 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
 | Module | Source | Type | Install |
 |--------|--------|------|---------|
-| **jdk** (8~26) | Azul Zulu API | SDK | Download + SHA256 |
+| **jdk** (8~25) | Azul Zulu API | SDK | Download + SHA256 |
 | **go** (1.2~1.26) | go.dev API | SDK | Download + SHA256 |
-| **node** (v0~v26) | nodejs.org API | SDK | Download + SHA256 |
-| **php** (5.6~8.6) | Homebrew | SDK | `brew install` + shim |
+| **node** (v0~v24) | nodejs.org API | SDK | Download + SHA256 |
+| **php** (5.6~8.4) | Homebrew | SDK | `brew install` + shim |
 | **python** (3.9~3.14) | Homebrew | SDK | `brew install` + shim |
 | **mysql** (8.0~9.x) | Homebrew | Service | `brew install` + shim |
 | **pgsql** (12~18) | Homebrew | Service | `brew install` + shim |
@@ -87,7 +89,7 @@ envswitch search pgsql         # brew search
 
 # ── Install ─────────────────────────────────
 envswitch install jdk 21.0.11
-envswitch install go 1.25.10
+envswitch install go 1.26.3
 envswitch install node 24.11.0
 envswitch install php 8.3      # brew install php@8.3
 envswitch install python 3.14  # brew install python@3.14
@@ -103,7 +105,7 @@ envswitch list jdk             # jdk only
 
 # ── Switch ──────────────────────────────────
 envswitch cover jdk 21         # instant (shim symlink)
-envswitch cover go 1.25.10
+envswitch cover go 1.26.3
 envswitch cover php 8.3
 envswitch cover node 24
 envswitch cover python 3.14
@@ -176,14 +178,17 @@ The GUI uses the same mechanism — clicking "Cover" updates the symlinks, and a
 │   └── mysql/8.0.46/
 ├── data/           # Service data (per-version)
 ├── state/          # Cover stack persistence
-├── cache/          # Download cache
-├── config/         # cd-hook, etc.
-└── init.sh         # Shell integration (auto-generated)
+├── cache/          # Download & metadata cache
+├── logs/           # Operation logs
+├── config/         # cd-hook, proxy config
+├── config.json     # Proxy & settings
+├── init.sh         # Shell integration (auto-generated)
+└── tmp/            # Staging directory for atomic installs
 ```
 
 ## GUI
 
-Built with **Tauri v2 + React + Tailwind CSS**:
+Built with **Tauri v2 + React + TypeScript + Tailwind CSS**:
 
 ```bash
 cd gui
@@ -192,7 +197,38 @@ npx tauri dev     # development (hot reload)
 npx tauri build   # production build → .app / .dmg
 ```
 
-Features: module list, version cover/uncover, service start/stop, platform detection.
+### Features
+
+- **Module management** — list, search, install, uninstall, cover, uncover all modules
+- **Service management** — start/stop MySQL, PostgreSQL with spinner feedback
+- **Real-time install logs** — streaming curl progress bars, brew output in install window
+- **Cancel with cleanup** — three-layer abort (token + process kill + tmp staging rollback)
+- **Operation log** — timestamped history of all actions (install, cover, start, stop)
+- **Auto-sync** — detects Homebrew/system JDK, Go, Node, Python and links automatically
+- **Proxy support** — HTTP/HTTPS proxy applied to all curl and brew commands
+- **Chinese/English** — full i18n with 100+ translation keys
+
+### Pages
+
+- **Versions** — module list with expandable cards, cover/uncover/install/uninstall per version
+- **Services** — MySQL/PostgreSQL cards with status, metadata, start/stop
+- **Status** — environment cover stack overview
+- **Logs** — global operation log with level filters (OK/INFO/WARN/ERR)
+- **Doctor** — diagnostic checks (platform, brew, modules, shims)
+- **Settings** — language toggle, proxy configuration, CLI examples
+
+## Proxy
+
+Set a proxy for downloads (curl, brew):
+
+```bash
+# CLI: set in config file
+echo '{"proxy": "http://127.0.0.1:7890"}' > ~/.envswitch/config.json
+
+# GUI: Settings → Proxy → Save
+```
+
+The proxy is applied to all network operations: JDK/Go/Node downloads, Homebrew search/install, version APIs.
 
 ## Development
 
@@ -203,6 +239,17 @@ cargo test -- --test-threads=1
 
 # GUI
 cd gui && npx tauri dev
+
+# Workspace structure
+.
+├── Cargo.toml          # Workspace root (CLI + lib)
+├── src/                # envswitch library + CLI binary
+│   ├── infra/          # fs, download, oplog
+│   ├── providers/      # jdk, go, node, php, python, mysql, pgsql, homebrew
+│   └── config.rs       # Proxy & settings
+└── gui/
+    ├── src/            # React frontend (pages, components, i18n)
+    └── src-tauri/      # Tauri backend (commands, job system)
 ```
 
 ## License
