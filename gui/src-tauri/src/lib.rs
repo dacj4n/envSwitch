@@ -216,17 +216,17 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
-        // Wait for the install window to open and register event listener
-        std::thread::sleep(std::time::Duration::from_millis(800));
+        // Give the install window time to open and register its event listener
+        std::thread::sleep(std::time::Duration::from_millis(1000));
 
-        // Phase 1: Prep (before real work)
-        send("running", "fetch", 0.05, &format!("Preparing to install {} {}...", m, v), 0, 0, 0, 0);
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        // Stage 1: Fetching
+        send("running", "fetching", 0.05, "Resolving download URL...", 0, 0, 0, 0);
+        std::thread::sleep(std::time::Duration::from_millis(400));
 
-        // Phase 2: Run install in background — send heartbeat during the wait
-        send("running", "download", 0.10, "Downloading and installing (this may take a while)...", 0, 0, 0, 0);
+        // Stage 2: Downloading (this is where the real work happens)
+        send("running", "downloading", 0.15, "Downloading...", 0, 0, 0, 0);
 
-        // Spawn the install, heartbeat while waiting
+        // Run install in sub-thread so we can heartbeat
         let (tx, rx) = std::sync::mpsc::channel();
         let m2 = m.clone(); let v2 = v.clone();
         std::thread::spawn(move || {
@@ -234,20 +234,31 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
             let _ = tx.send(result);
         });
 
-        // Heartbeat: update progress every 2 seconds while install runs
-        let mut heartbeat = 0.15f32;
+        // Heartbeat: slowly advance progress while install runs, but cap at 0.70 until done
+        let mut hb = 0.18f32;
         loop {
             match rx.recv_timeout(std::time::Duration::from_secs(2)) {
                 Ok(result) => {
+                    // Stage 3-5: verify + extract + finalize (happens inside install, now done)
                     match result {
-                        Ok(()) => send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0),
-                        Err(e) => send("failed", "error", heartbeat, &format!("Error: {}", e), 0, 0, 0, 0),
+                        Ok(()) => {
+                            send("running", "verifying", 0.75, "Verifying...", 0, 0, 0, 0);
+                            std::thread::sleep(std::time::Duration::from_millis(300));
+                            send("running", "extracting", 0.85, "Extracting...", 0, 0, 0, 0);
+                            std::thread::sleep(std::time::Duration::from_millis(300));
+                            send("running", "installing", 0.92, "Finalizing...", 0, 0, 0, 0);
+                            std::thread::sleep(std::time::Duration::from_millis(300));
+                            send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
+                        }
+                        Err(e) => {
+                            send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
+                        }
                     }
                     break;
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    heartbeat = (heartbeat + 0.03).min(0.85);
-                    send("running", "download", heartbeat, "Still working...", 0, 0, 0, 0);
+                    hb = (hb + 0.03).min(0.65);
+                    send("running", "downloading", hb, "Downloading...", 0, 0, 0, 0);
                 }
                 Err(_) => break,
             }

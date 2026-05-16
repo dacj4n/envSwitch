@@ -10,7 +10,7 @@ interface JobUpdate {
   status: string; progress: number; message: string; phase: string;
 }
 
-const PHASES = ['fetch', 'download', 'verify', 'extract', 'install', 'done'];
+const PHASES = ['fetching', 'downloading', 'verifying', 'extracting', 'installing', 'done'];
 
 export default function InstallPage() {
   const { jobId } = useParams<{ jobId: string }>();
