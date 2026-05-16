@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
-import { PlayIcon, SquareIcon, RefreshCwIcon, ServerIcon, ClockIcon, HardDriveIcon, NetworkIcon, CircleDotIcon, DatabaseIcon } from 'lucide-react';
+import { PlayIcon, SquareIcon, ServerIcon, HardDriveIcon, NetworkIcon, CircleDotIcon, DatabaseIcon } from 'lucide-react';
 
 interface ServiceInfo { name: string; status: string; pid: number | null; port: number | null; }
 interface ModuleInfo { name: string; display_name: string; category: string; versions: string[]; active_version: string | null; source_paths: string[]; }
@@ -60,11 +60,13 @@ export default function ServicesPage() {
             <span className="text-sm text-muted-foreground">{stoppedCount} stopped</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => services.forEach(s => s.status === 'Stopped' && toggle(s.name, false))}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
+            <button onClick={async () => {
+              for (const s of services) { if (s.status === 'Stopped') await toggle(s.name, false); }
+            }} className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
             ><PlayIcon className="w-3.5 h-3.5" /> Start All</button>
-            <button onClick={() => services.forEach(s => s.status === 'Running' && toggle(s.name, true))}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 font-medium"
+            <button onClick={async () => {
+              for (const s of services) { if (s.status === 'Running') await toggle(s.name, true); }
+            }} className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 font-medium"
             ><SquareIcon className="w-3.5 h-3.5" /> Stop All</button>
           </div>
         </div>
