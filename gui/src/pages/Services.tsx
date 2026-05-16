@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
-import { PlayIcon, SquareIcon, ServerIcon, HardDriveIcon, NetworkIcon, CircleDotIcon, DatabaseIcon } from 'lucide-react';
+import { PlayIcon, SquareIcon, ServerIcon, HardDriveIcon, NetworkIcon, CircleDotIcon, DatabaseIcon, Loader2Icon } from 'lucide-react';
 
 interface ServiceInfo { name: string; status: string; pid: number | null; port: number | null; }
 interface ModuleInfo { name: string; display_name: string; category: string; versions: string[]; active_version: string | null; source_paths: string[]; }
@@ -20,6 +21,25 @@ export default function ServicesPage() {
   const { t } = useTranslation();
   const [services, setServices] = useState<ServiceInfo[]>([]);
   const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  // Listen for job updates to detect start/stop completion
+  useEffect(() => {
+    const unlisten = listen<{id: string; kind: string; module: string; status: string; message: string}>('job-update', (ev) => {
+      const j = ev.payload;
+      if (j.kind === 'start' || j.kind === 'stop') {
+        if (j.status === 'success') {
+          toast.success(j.message);
+          refresh();
+          setToggling(null);
+        } else if (j.status === 'failed') {
+          toast.error(j.message);
+          setToggling(null);
+        }
+      }
+    });
+    return () => { unlisten.then(f => f()); };
+  }, []);
 
   const refresh = () => {
     invoke<ServiceInfo[]>('get_services').then(setServices);
@@ -27,14 +47,14 @@ export default function ServicesPage() {
   };
   useEffect(() => { refresh(); }, []);
 
-  const toggle = async (name: string, running: boolean) => {
+  const toggle = (name: string, running: boolean) => {
     const mod = modules.find(m => m.name === name);
     const ver = mod?.active_version || mod?.versions[0];
-    try {
-      if (running) { await invoke('stop_service', { module: name }); toast.success(`${name} stopped`); }
-      else if (ver) { await invoke('start_service', { module: name, version: ver }); toast.success(`${name} started`); }
-      refresh();
-    } catch (e) { toast.error(`${e}`); }
+    setToggling(name);
+    const cmd = running
+      ? invoke('stop_service', { module: name })
+      : invoke('start_service', { module: name, version: ver });
+    cmd.catch(e => { toast.error(`${e}`); setToggling(null); });
   };
 
   const runningCount = services.filter(s => s.status === 'Running').length;
@@ -60,12 +80,12 @@ export default function ServicesPage() {
             <span className="text-sm text-muted-foreground">{stoppedCount} stopped</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={async () => {
-              for (const s of services) { if (s.status === 'Stopped') await toggle(s.name, false); }
+            <button onClick={() => {
+              for (const s of services) { if (s.status === 'Stopped') toggle(s.name, false); }
             }} className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
             ><PlayIcon className="w-3.5 h-3.5" /> Start All</button>
-            <button onClick={async () => {
-              for (const s of services) { if (s.status === 'Running') await toggle(s.name, true); }
+            <button onClick={() => {
+              for (const s of services) { if (s.status === 'Running') toggle(s.name, true); }
             }} className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 font-medium"
             ><SquareIcon className="w-3.5 h-3.5" /> Stop All</button>
           </div>
@@ -130,12 +150,12 @@ export default function ServicesPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 px-5 pb-4">
-                  <button onClick={() => toggle(svc.name, false)} disabled={running}
+                  <button onClick={() => toggle(svc.name, false)} disabled={running || toggling === svc.name}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium disabled:opacity-40"
-                  ><PlayIcon className="w-3.5 h-3.5" /> Start</button>
-                  <button onClick={() => toggle(svc.name, true)} disabled={!running}
+                  >{toggling === svc.name && !running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlayIcon className="w-3.5 h-3.5" />} Start</button>
+                  <button onClick={() => toggle(svc.name, true)} disabled={!running || toggling === svc.name}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 font-medium disabled:opacity-40"
-                  ><SquareIcon className="w-3.5 h-3.5" /> Stop</button>
+                  >{toggling === svc.name && running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <SquareIcon className="w-3.5 h-3.5" />} Stop</button>
                   <div className="ml-auto text-[10px] font-mono text-muted-foreground/60">
                     $ envswitch {running ? 'stop' : 'start'} {svc.name}
                   </div>

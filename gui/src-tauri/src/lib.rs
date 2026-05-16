@@ -117,12 +117,88 @@ fn uncover_all_modules() -> Result<String, String> { environment::uncover_all() 
 fn get_status() -> Vec<envswitch::domain::ActiveCover> { environment::get_status() }
 
 #[tauri::command]
-fn start_service(module: String, version: String) -> Result<String, String> {
-    service_mgr::start(&module, &version).map(|s| format!("PID: {}, Port: {}", s.pid, s.port)).map_err(|e| e.to_string())
+fn start_service(app: tauri::AppHandle, module: String, version: String) -> String {
+    let job_id = next_job_id();
+    let m = module.clone(); let v = version.clone(); let jid = job_id.clone();
+
+    {
+        let mut jobs = JOBS.lock().unwrap();
+        jobs.insert(job_id.clone(), JobState { id: job_id.clone(), kind: "start".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting service...".into(), phase: "installing".into(), logs: vec![] });
+    }
+
+    let _ = app.emit("job-update", JobProgress {
+        id: job_id.clone(), kind: "start".into(), module: module.clone(), version: version.clone(),
+        status: "running".into(), progress: 0.0, message: "Starting service...".into(), phase: "installing".into(),
+        downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+    });
+
+    std::thread::spawn(move || {
+        match service_mgr::start(&m, &v) {
+            Ok(s) => {
+                let msg = format!("{} {} started — PID: {}, Port: {}", m, v, s.pid, s.port);
+                let mut jobs = JOBS.lock().unwrap();
+                if let Some(j) = jobs.get_mut(&jid) { j.status = "success".into(); j.progress = 1.0; j.message = msg.clone(); }
+                let _ = app.emit("job-update", JobProgress {
+                    id: jid, kind: "start".into(), module: m, version: v,
+                    status: "success".into(), progress: 1.0, message: msg, phase: "done".into(),
+                    downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+                });
+            }
+            Err(e) => {
+                let mut jobs = JOBS.lock().unwrap();
+                if let Some(j) = jobs.get_mut(&jid) { j.status = "failed".into(); j.message = format!("Error: {}", e); }
+                let _ = app.emit("job-update", JobProgress {
+                    id: jid, kind: "start".into(), module: m, version: v,
+                    status: "failed".into(), progress: 0.0, message: format!("Error: {}", e), phase: "error".into(),
+                    downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+                });
+            }
+        }
+    });
+    job_id
 }
 
 #[tauri::command]
-fn stop_service(module: String) -> Result<String, String> { service_mgr::stop(&module).map(|()| "stopped".to_string()).map_err(|e| e.to_string()) }
+fn stop_service(app: tauri::AppHandle, module: String) -> String {
+    let job_id = next_job_id();
+    let m = module.clone(); let jid = job_id.clone();
+
+    {
+        let mut jobs = JOBS.lock().unwrap();
+        jobs.insert(job_id.clone(), JobState { id: job_id.clone(), kind: "stop".into(), module: module.clone(), version: String::new(), status: "running".into(), progress: 0.0, message: "Stopping service...".into(), phase: "installing".into(), logs: vec![] });
+    }
+
+    let _ = app.emit("job-update", JobProgress {
+        id: job_id.clone(), kind: "stop".into(), module: module.clone(), version: String::new(),
+        status: "running".into(), progress: 0.0, message: "Stopping service...".into(), phase: "installing".into(),
+        downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+    });
+
+    std::thread::spawn(move || {
+        match service_mgr::stop(&m) {
+            Ok(()) => {
+                let msg = format!("{} stopped", m);
+                let mut jobs = JOBS.lock().unwrap();
+                if let Some(j) = jobs.get_mut(&jid) { j.status = "success".into(); j.progress = 1.0; j.message = msg.clone(); }
+                let _ = app.emit("job-update", JobProgress {
+                    id: jid, kind: "stop".into(), module: m, version: String::new(),
+                    status: "success".into(), progress: 1.0, message: msg, phase: "done".into(),
+                    downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+                });
+            }
+            Err(e) => {
+                let mut jobs = JOBS.lock().unwrap();
+                if let Some(j) = jobs.get_mut(&jid) { j.status = "failed".into(); j.message = format!("Error: {}", e); }
+                let _ = app.emit("job-update", JobProgress {
+                    id: jid, kind: "stop".into(), module: m, version: String::new(),
+                    status: "failed".into(), progress: 0.0, message: format!("Error: {}", e), phase: "error".into(),
+                    downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0,
+                });
+            }
+        }
+    });
+    job_id
+}
 
 #[tauri::command]
 fn get_services() -> Vec<ServiceInfo> {
@@ -513,6 +589,21 @@ fn link_module(module: String, version: String, path: String) -> Result<String, 
 fn get_platform() -> String { platform::Platform::current().display().to_string() }
 
 #[tauri::command]
+fn list_installed_versions(module: String) -> Vec<String> {
+    install::list_installed(&module).unwrap_or_default().iter().map(|v| v.version.clone()).collect()
+}
+
+#[tauri::command]
+fn read_service_logs(module: String, version: String, lines: usize) -> Vec<String> {
+    let data_dir = envswitch::infra::fs::envswitch_home().join("data").join(&module).join(&version);
+    match module.as_str() {
+        "mysql" => providers::mysql::MySqlProvider::read_logs(&data_dir, lines).unwrap_or_default(),
+        "pgsql" => providers::postgresql::PostgresqlProvider::read_logs(&data_dir, lines).unwrap_or_default(),
+        _ => vec!["No log reader for this module".into()],
+    }
+}
+
+#[tauri::command]
 fn get_proxy() -> Option<String> { envswitch::config::get_proxy() }
 
 #[tauri::command]
@@ -672,7 +763,7 @@ pub fn run() {
             list_modules, cover_module, uncover_module, uncover_all_modules, get_status,
             start_service, stop_service, get_services, get_platform,
             sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job, get_job_state,
-            get_proxy, set_proxy,
+            get_proxy, set_proxy, list_installed_versions, read_service_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
