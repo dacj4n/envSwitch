@@ -28,6 +28,20 @@ envswitch() {{
     esac
 }}
 
+# Auto cd-hook: detect .envswitchrc when changing directories
+__envswitch_cd_hook() {{
+    local hook_file="${{_ENVSWITCH_HOME}}/config/cd-hook"
+    if [ -f "$hook_file" ] && [ "$(cat "$hook_file")" = "on" ]; then
+        cd() {{
+            builtin cd "$@" || return
+            if [ -f ".envswitchrc" ]; then
+                eval "$("$_ENVSWITCH_BIN" auto 2>/dev/null)"
+            fi
+        }}
+    fi
+}}
+__envswitch_cd_hook
+
 # Load env vars from global covers on shell startup
 __envswitch_load_global() {{
     local sf="${{_ENVSWITCH_HOME}}/state/global.json"

@@ -66,6 +66,7 @@ fn main() {
         Commands::Auto => cmd_auto(),
         Commands::InitProject => project::init_project(&std::env::current_dir().unwrap()),
         Commands::Init { shell } => cmd_init(&shell),
+        Commands::CdHook { state } => cmd_cd_hook(&state),
     };
 
     if let Err(e) = result {
@@ -294,8 +295,14 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     std::fs::write(&init_path, &init_script)
         .map_err(|e| format!("Cannot write init.sh: {}", e))?;
 
-    // Create shims directory
+    // Create shims and config directories
     let _ = std::fs::create_dir_all(infra::fs::envswitch_home().join("shims"));
+    let config_dir = infra::fs::envswitch_home().join("config");
+    let _ = std::fs::create_dir_all(&config_dir);
+    let cd_hook_file = config_dir.join("cd-hook");
+    if !cd_hook_file.exists() {
+        let _ = std::fs::write(&cd_hook_file, "off");
+    }
 
     // Auto-write source line to ~/.zshrc (idempotent — only once)
     let home = std::env::var("HOME").ok()
@@ -315,5 +322,25 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
         .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
     eprintln!("Source line added to end of {}", zshrc.display());
     eprintln!("Shell integration ready. Run: source ~/.zshrc");
+    Ok(())
+}
+
+fn cmd_cd_hook(state: &str) -> Result<(), String> {
+    let config_dir = infra::fs::envswitch_home().join("config");
+    let _ = std::fs::create_dir_all(&config_dir);
+    let hook_file = config_dir.join("cd-hook");
+
+    match state {
+        "on" => {
+            std::fs::write(&hook_file, "on").map_err(|e| format!("write: {}", e))?;
+            eprintln!("cd-hook enabled. Run: source ~/.zshrc   (or open new terminal)");
+            eprintln!("Then cd into a dir with .envswitchrc to auto-switch.");
+        }
+        "off" => {
+            std::fs::write(&hook_file, "off").map_err(|e| format!("write: {}", e))?;
+            eprintln!("cd-hook disabled.");
+        }
+        _ => return Err(format!("Usage: envswitch cd-hook on|off")),
+    }
     Ok(())
 }

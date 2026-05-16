@@ -135,4 +135,10 @@ pub enum Commands {
         #[arg(default_value = "zsh")]
         shell: String,
     },
+
+    /// Enable/disable auto cd-hook for .envswitchrc
+    CdHook {
+        /// on | off
+        state: String,
+    },
 }
