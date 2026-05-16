@@ -1,5 +1,5 @@
 use envswitch::domain::{CoverScope, ModuleCategory, InstalledMetadata, InstalledVersion as DomainInstalledVersion};
-use envswitch::{install, environment, module_repo, service_mgr, platform};
+use envswitch::{install, environment, module_repo, service_mgr, platform, providers};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -128,6 +128,36 @@ fn link_module(module: String, version: String, path: String) -> Result<String, 
 }
 
 #[tauri::command]
+fn search_versions(module: String) -> Vec<String> {
+    match module.as_str() {
+        "jdk" => envswitch::providers::jdk::JdkProvider::fetch_remote_versions().unwrap_or_default(),
+        "go" => envswitch::providers::go::GoProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        "node" => envswitch::providers::node::NodeProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        "php" => envswitch::providers::php::PhpProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        "python" => envswitch::providers::python::PythonProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        "mysql" => envswitch::providers::mysql::MySqlProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        "pgsql" => envswitch::providers::postgresql::PostgresqlProvider::fetch_remote_versions()
+            .unwrap_or_default().iter().map(|v| v.version.clone()).collect(),
+        _ => vec![],
+    }
+}
+
+#[tauri::command]
+fn install_version(module: String, version: String) -> Result<String, String> {
+    install::install(&module, &version, false).map(|()| format!("{} {} installed", module, version))
+}
+
+#[tauri::command]
+fn uninstall_version(module: String, version: String) -> Result<String, String> {
+    install::uninstall(&module, &version, false).map(|()| format!("{} {} uninstalled", module, version))
+}
+
+#[tauri::command]
 fn get_platform() -> String {
     platform::Platform::current().display().to_string()
 }
@@ -232,6 +262,9 @@ pub fn run() {
             get_platform,
             sync_local,
             link_module,
+            search_versions,
+            install_version,
+            uninstall_version,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
