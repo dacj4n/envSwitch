@@ -1,5 +1,6 @@
 use envswitch::domain::{CoverScope, ModuleCategory, InstalledMetadata, InstalledVersion as DomainInstalledVersion};
 use envswitch::{install, environment, module_repo, service_mgr, platform, providers};
+use envswitch::infra::oplog::{log_op, OpLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc, atomic::{AtomicBool, Ordering}};
@@ -104,14 +105,27 @@ fn list_modules() -> Vec<ModuleInfo> {
 #[tauri::command]
 fn cover_module(module: String, version: String, global: bool) -> Result<String, String> {
     let scope = if global { CoverScope::Global } else { CoverScope::Session };
-    environment::cover(&module, &version, scope)
+    let result = environment::cover(&module, &version, scope);
+    match &result {
+        Ok(_) => log_op(OpLevel::Ok, &format!("envswitch cover {} {} — switched", module, version)),
+        Err(e) => log_op(OpLevel::Error, &format!("cover {} {} failed: {}", module, version, e)),
+    }
+    result
 }
 
 #[tauri::command]
-fn uncover_module(module: String) -> Result<String, String> { environment::uncover(&module) }
+fn uncover_module(module: String) -> Result<String, String> {
+    let result = environment::uncover(&module);
+    if result.is_ok() { log_op(OpLevel::Info, &format!("envswitch uncover {}", module)); }
+    result
+}
 
 #[tauri::command]
-fn uncover_all_modules() -> Result<String, String> { environment::uncover_all() }
+fn uncover_all_modules() -> Result<String, String> {
+    let result = environment::uncover_all();
+    if result.is_ok() { log_op(OpLevel::Info, "envswitch uncover --all"); }
+    result
+}
 
 #[tauri::command]
 fn get_status() -> Vec<envswitch::domain::ActiveCover> { environment::get_status() }
@@ -136,6 +150,7 @@ fn start_service(app: tauri::AppHandle, module: String, version: String) -> Stri
         match service_mgr::start(&m, &v) {
             Ok(s) => {
                 let msg = format!("{} {} started — PID: {}, Port: {}", m, v, s.pid, s.port);
+                log_op(OpLevel::Ok, &format!("envswitch start {} {} — pid {} port {}", m, v, s.pid, s.port));
                 let mut jobs = JOBS.lock().unwrap();
                 if let Some(j) = jobs.get_mut(&jid) { j.status = "success".into(); j.progress = 1.0; j.message = msg.clone(); }
                 let _ = app.emit("job-update", JobProgress {
@@ -178,6 +193,7 @@ fn stop_service(app: tauri::AppHandle, module: String) -> String {
         match service_mgr::stop(&m) {
             Ok(()) => {
                 let msg = format!("{} stopped", m);
+                log_op(OpLevel::Info, &format!("envswitch stop {} — stopped", m));
                 let mut jobs = JOBS.lock().unwrap();
                 if let Some(j) = jobs.get_mut(&jid) { j.status = "success".into(); j.progress = 1.0; j.message = msg.clone(); }
                 let _ = app.emit("job-update", JobProgress {
@@ -420,10 +436,12 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
                                     let _ = envswitch::infra::fs::save_installed(&m, &meta);
                                 }
                                 // Real log messages were already emitted via drain_logs
+                                log_op(OpLevel::Ok, &format!("install {} {} — done", m, v));
                                 send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
                             }
                             Err(e) => {
                                 let _ = std::fs::remove_dir_all(&final_staging);
+                                log_op(OpLevel::Error, &format!("install {} {} failed: {}", m, v, e));
                                 send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
                             }
                         }
@@ -485,9 +503,11 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
                         }
                         match result {
                             Ok(()) => {
+                                log_op(OpLevel::Ok, &format!("install {} {} — done", m, v));
                                 send("success", "done", 1.0, &format!("{} {} installed successfully", m, v), 0, 0, 0, 0);
                             }
                             Err(e) => {
+                                log_op(OpLevel::Error, &format!("install {} {} failed: {}", m, v, e));
                                 send("failed", "error", hb, &format!("Error: {}", e), 0, 0, 0, 0);
                             }
                         }
@@ -557,8 +577,8 @@ fn uninstall_version(app: tauri::AppHandle, module: String, version: String) -> 
             let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "uninstall".into(), module: m.clone(), version: v.clone(), status: status.into(), progress: if status == "success" { 1.0 } else { 0.0 }, message: msg.into(), phase: "done".into(), downloaded_bytes: 0, total_bytes: 0, speed_bytes: 0, eta_seconds: 0 });
         };
         match install::uninstall(&m, &v, false) {
-            Ok(()) => send("success", &format!("{} {} uninstalled", m, v)),
-            Err(e) => send("failed", &format!("Error: {}", e)),
+            Ok(()) => { log_op(OpLevel::Info, &format!("uninstall {} {} — done", m, v)); send("success", &format!("{} {} uninstalled", m, v)); }
+            Err(e) => { log_op(OpLevel::Error, &format!("uninstall {} {} failed: {}", m, v, e)); send("failed", &format!("Error: {}", e)); }
         }
     });
     job_id
@@ -601,6 +621,11 @@ fn read_service_logs(module: String, version: String, lines: usize) -> Vec<Strin
         "pgsql" => providers::postgresql::PostgresqlProvider::read_logs(&data_dir, lines).unwrap_or_default(),
         _ => vec!["No log reader for this module".into()],
     }
+}
+
+#[tauri::command]
+fn get_operation_logs(lines: usize) -> Vec<String> {
+    envswitch::infra::oplog::read_ops(lines.max(1).min(5000))
 }
 
 #[tauri::command]
@@ -763,7 +788,7 @@ pub fn run() {
             list_modules, cover_module, uncover_module, uncover_all_modules, get_status,
             start_service, stop_service, get_services, get_platform,
             sync_local, link_module, search_versions, install_version, uninstall_version, cancel_job, get_job_state,
-            get_proxy, set_proxy, list_installed_versions, read_service_logs,
+            get_proxy, set_proxy, list_installed_versions, read_service_logs, get_operation_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

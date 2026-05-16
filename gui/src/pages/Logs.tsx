@@ -5,70 +5,50 @@ import TopBar from '../components/TopBar';
 import { ScrollTextIcon, InfoIcon, CheckCircle2Icon, AlertTriangleIcon, XCircleIcon, Loader2Icon } from 'lucide-react';
 
 const LEVEL_COLORS: Record<string, string> = {
-  ALL: '#60a5fa', INFO: '#60a5fa', SUCCESS: '#22c55e', WARN: '#f59e0b', ERROR: '#ef4444',
+  ALL: '#60a5fa', OK: '#22c55e', INFO: '#60a5fa', WARN: '#f59e0b', ERR: '#ef4444',
 };
 const LEVEL_ICONS: Record<string, React.ComponentType<any>> = {
-  ALL: InfoIcon, INFO: InfoIcon, SUCCESS: CheckCircle2Icon, WARN: AlertTriangleIcon, ERROR: XCircleIcon,
+  ALL: InfoIcon, OK: CheckCircle2Icon, INFO: InfoIcon, WARN: AlertTriangleIcon, ERR: XCircleIcon,
 };
 
-interface ServiceInfo { name: string; status: string; pid: number | null; port: number | null; }
-
-function parseLevel(line: string): string {
-  if (/\[ERROR\]|error:|Error:/i.test(line)) return 'ERROR';
-  if (/\[WARNING\]|\[WARN\]|warning:|warn:/i.test(line)) return 'WARN';
-  if (/\[System\]|\[Note\]|started|ready|initialized/i.test(line)) return 'SUCCESS';
+function parseLevelLine(line: string): string {
+  if (/\bERR\b/.test(line)) return 'ERR';
+  if (/\bWARN\b/.test(line)) return 'WARN';
+  if (/\bOK\b/.test(line)) return 'OK';
   return 'INFO';
 }
 
 export default function LogsPage() {
   const { t } = useTranslation();
-  const [services, setServices] = useState<ServiceInfo[]>([]);
-  const [service, setService] = useState('mysql');
-  const [version, setVersion] = useState('');
+  const [logs, setLogs] = useState<string[]>([]);
   const [filter, setFilter] = useState('ALL');
-  const [lines, setLines] = useState(100);
-  const [logs, setLogs] = useState<{ text: string; level: string }[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    invoke<ServiceInfo[]>('get_services').then(s => {
-      setServices(s);
-      if (s.length > 0) setService(s[0].name);
-    });
-  }, []);
-
-  useEffect(() => {
-    invoke<string[]>('list_installed_versions', { module: service }).then(v => {
-      if (v.length > 0) setVersion(v[0]);
-    }).catch(() => {});
-  }, [service]);
-
   const refresh = useCallback(async () => {
-    if (!version) return;
     setLoading(true);
     try {
-      const raw = await invoke<string[]>('read_service_logs', { module: service, version, lines });
-      setLogs(raw.map(text => ({ text, level: parseLevel(text) })));
+      const raw = await invoke<string[]>('get_operation_logs', { lines: 500 });
+      setLogs(raw);
     } catch { setLogs([]); }
     setLoading(false);
-  }, [service, version, lines]);
+  }, []);
 
-  useEffect(() => { if (version) refresh(); }, [version]);
+  useEffect(() => { refresh(); }, []);
+
+  const filtered = logs.filter(l => {
+    if (filter === 'ALL') return true;
+    return parseLevelLine(l) === filter;
+  });
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <TopBar title={t('nav.logs')} subtitle={t('service.logsSubtitle')} />
+      <TopBar title={t('nav.logs')} subtitle={t('logs.subtitle')} />
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3">
             <ScrollTextIcon className="w-4 h-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">{t('service.logViewer')}</span>
+            <span className="text-sm font-semibold text-foreground">{t('logs.operationLog')}</span>
             <div className="flex items-center gap-1 ml-auto">
-              <select value={service} onChange={e => setService(e.target.value)}
-                className="px-2.5 py-1.5 rounded-md border border-border bg-background text-xs text-foreground">
-                {services.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                {services.length === 0 && <><option value="mysql">mysql</option><option value="pgsql">pgsql</option></>}
-              </select>
               <button onClick={refresh} disabled={loading}
                 className="px-3 py-1.5 rounded-md text-xs bg-secondary hover:bg-accent border border-border text-secondary-foreground flex items-center gap-1"
               >
@@ -80,9 +60,9 @@ export default function LogsPage() {
 
           {/* Level filters */}
           <div className="flex items-center gap-1 px-5 py-2 border-t border-border/50 bg-muted/5">
-            {['ALL', 'INFO', 'SUCCESS', 'WARN', 'ERROR'].map(level => {
-              const color = LEVEL_COLORS[level];
-              const Icon = LEVEL_ICONS[level];
+            {['ALL', 'OK', 'INFO', 'WARN', 'ERR'].map(level => {
+              const color = LEVEL_COLORS[level] || '#888';
+              const Icon = LEVEL_ICONS[level] || InfoIcon;
               return (
                 <button key={level} onClick={() => setFilter(level)}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
@@ -94,25 +74,25 @@ export default function LogsPage() {
                 </button>
               );
             })}
+            <span className="ml-auto text-[10px] text-muted-foreground font-mono">{filtered.length} entries</span>
           </div>
 
           {/* Log lines */}
-          <div className="divide-y divide-border/30 bg-background font-mono text-xs max-h-[calc(100vh-320px)] overflow-y-auto">
-            {logs
-              .filter(l => filter === 'ALL' || l.level === filter)
-              .map((line, i) => {
-                const color = LEVEL_COLORS[line.level] || LEVEL_COLORS.INFO;
-                const Icon = LEVEL_ICONS[line.level] || InfoIcon;
-                return (
-                  <div key={i} className="flex items-start gap-2 px-4 py-2 hover:bg-muted/10">
-                    <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color }} />
-                    <span style={{ color }} className="whitespace-pre-wrap break-all">{line.text}</span>
-                  </div>
-                );
-              })}
+          <div className="divide-y divide-border/30 bg-background font-mono text-xs max-h-[calc(100vh-260px)] overflow-y-auto">
+            {filtered.map((line, i) => {
+              const level = parseLevelLine(line);
+              const color = LEVEL_COLORS[level] || LEVEL_COLORS.INFO;
+              const Icon = LEVEL_ICONS[level] || InfoIcon;
+              return (
+                <div key={i} className="flex items-start gap-2 px-4 py-2 hover:bg-muted/10">
+                  <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color }} />
+                  <span style={{ color }} className="whitespace-pre-wrap break-all">{line}</span>
+                </div>
+              );
+            })}
             {logs.length === 0 && !loading && (
               <div className="px-4 py-12 text-center text-muted-foreground text-xs">
-                {version ? t('common.noLogs') : t('common.noVersionFound')}
+{t('logs.empty')}
               </div>
             )}
             {loading && (

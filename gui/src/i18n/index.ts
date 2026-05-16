@@ -19,6 +19,7 @@ i18n
           doctor: { subtitle: 'Diagnose setup issues', runningChecks: 'Running checks...', allOk: 'All systems OK', checksPassed: 'checks passed', issuesFound: 'issues found', warnings: 'warnings', platformDetected: 'Platform detected', modulesLoaded: 'Modules loaded', shimsDir: 'Shims directory', brewAvailable: 'Homebrew available', brewFound: 'brew found', brewNotFound: 'brew not found', countModules: 'modules' },
           settings: { title: 'Settings', subtitle: 'Configure envSwitch behavior', language: 'Language', languageDesc: 'Switch between English and Chinese', proxy: 'Proxy', proxyDesc: 'HTTP/HTTPS proxy for downloads', brewSource: 'Homebrew Source', brewSourceDesc: 'Custom Homebrew registry mirror', cliExamples: 'CLI Examples', saved: 'Saved', proxySaved: 'Proxy saved — takes effect on next install', copied: 'Copied', switchedEn: 'Switched to English', switchedZh: '已切换为中文' },
           toast: { covered: 'covered', uncovered: 'uncovered', started: 'started', stopped: 'stopped', error: 'Error' },
+          logs: { empty: 'No operations yet — logs will appear here as you use envSwitch', operationLog: 'Operation Log', subtitle: 'All operations — install, cover, service, errors', entries: 'entries' },
           cli: { searchJdk: 'Search available JDK versions', installJdk: 'Install JDK 21', coverJdk: 'Activate JDK 21 (shim switch)', coverGo: 'Activate Go 1.25.10', status: 'Show current cover stack', uncoverAll: 'Restore all system defaults', list: 'List installed versions', doctor: 'Diagnose setup issues', startMysql: 'Start MySQL service', cdHook: 'Enable auto-switch on cd' }
         }
       },
@@ -34,6 +35,7 @@ i18n
           doctor: { subtitle: '诊断配置问题', runningChecks: '检查中...', allOk: '所有系统正常', checksPassed: '项通过', issuesFound: '个问题', warnings: '个警告', platformDetected: '平台检测', modulesLoaded: '模块加载', shimsDir: 'Shims 目录', brewAvailable: 'Homebrew 可用', brewFound: '已发现 brew', brewNotFound: '未找到 brew', countModules: '个模块' },
           settings: { title: '设置', subtitle: '配置 envSwitch 行为', language: '语言', languageDesc: '切换中文和英文界面', proxy: '代理', proxyDesc: '下载使用的 HTTP/HTTPS 代理', brewSource: 'Homebrew 源', brewSourceDesc: '自定义 Homebrew 镜像源', cliExamples: 'CLI 示例', saved: '已保存', proxySaved: '代理已保存 — 下次安装时生效', copied: '已复制', switchedEn: 'Switched to English', switchedZh: '已切换为中文' },
           toast: { covered: '已覆盖', uncovered: '已取消覆盖', started: '已启动', stopped: '已停止', error: '错误' },
+          logs: { empty: '暂无操作 — 使用 envSwitch 后日志将显示在此处', operationLog: '操作日志', subtitle: '所有操作 — 安装、覆盖、服务、错误', entries: '条' },
           cli: { searchJdk: '搜索可用的 JDK 版本', installJdk: '安装 JDK 21', coverJdk: '激活 JDK 21 (shim 切换)', coverGo: '激活 Go 1.25.10', status: '显示当前覆盖状态', uncoverAll: '恢复所有系统默认', list: '列出已安装版本', doctor: '诊断配置问题', startMysql: '启动 MySQL 服务', cdHook: '启用 cd 自动切换' }
         }
       }

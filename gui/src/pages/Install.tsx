@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
-import { CheckCircleIcon, XCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
+import { CheckCircleIcon, Loader2Icon, PackageIcon } from 'lucide-react';
 
 interface JobUpdate {
   id: string; kind: string; module: string; version: string;
