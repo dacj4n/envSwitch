@@ -155,7 +155,8 @@ impl MySqlProvider {
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
-    let output = Command::new("brew")
+    let brew_cmd = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+    let output = Command::new(brew_cmd)
         .args(["info", "--json=v2", formula])
         .output()
         .map_err(|e| format!("brew info: {}", e))?;
