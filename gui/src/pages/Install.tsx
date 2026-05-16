@@ -63,22 +63,30 @@ export default function InstallPage() {
     if (logRef.current) { logRef.current.scrollTop = logRef.current.scrollHeight; }
   }, [logs]);
 
-  // Animate progress smoothly between backend updates
+  // Animate progress: during download/extract, auto-increment slowly toward target
   const [animProgress, setAnimProgress] = useState(0);
   const targetRef = useRef(0);
+  const tickRef = useRef(0);
   useEffect(() => {
     targetRef.current = job?.progress ?? 0;
     if (job?.status === 'success') { setAnimProgress(1); return; }
-    if (job?.status === 'failed') { setAnimProgress(0); return; }
+    if (job?.status === 'failed') { return; }
+    tickRef.current = 0;
     const timer = setInterval(() => {
+      tickRef.current += 1;
       setAnimProgress(prev => {
-        if (prev >= targetRef.current) return prev; // don't go backward
-        const next = prev + (targetRef.current - prev) * 0.05; // ease in
-        return next >= targetRef.current ? targetRef.current : next;
+        const target = targetRef.current;
+        // Auto-advance slowly (0.3% per tick) during download/extract phases, capped at 95% of target
+        const phaseStep = (job?.phase === 'download' || job?.phase === 'extract') ? 0.003 : 0;
+        const auto = Math.min(prev + phaseStep, target * 0.95);
+        if (auto > prev) return auto;
+        if (prev >= target) return prev;
+        const next = prev + (target - prev) * 0.08;
+        return next >= target ? target : next;
       });
-    }, 80);
+    }, 100);
     return () => clearInterval(timer);
-  }, [job?.progress, job?.status]);
+  }, [job?.progress, job?.status, job?.phase]);
 
   const close = () => { getCurrentWindow().close(); };
   const isDone = job?.status === 'success' || job?.status === 'failed';
