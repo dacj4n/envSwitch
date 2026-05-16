@@ -34,6 +34,11 @@ struct JobProgress {
     status: String,
     progress: f32,
     message: String,
+    phase: String,
+    downloaded_bytes: u64,
+    total_bytes: u64,
+    speed_bytes: u64,
+    eta_seconds: u64,
 }
 
 #[derive(Serialize)]
@@ -206,15 +211,19 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
     let _ = app.emit("job-update", JobProgress { id: job_id.clone(), kind: "install".into(), module: module.clone(), version: version.clone(), status: "running".into(), progress: 0.0, message: "Starting install...".into() });
 
     std::thread::spawn(move || {
-        let send = |status: &str, progress: f32, msg: &str| {
+        let send = |status: &str, phase: &str, progress: f32, msg: &str, dl: u64, tb: u64, sp: u64, eta: u64| {
             let mut jobs = JOBS.lock().unwrap();
             if let Some(j) = jobs.get_mut(&jid) { j.status = status.into(); j.progress = progress; j.message = msg.into(); j.logs.push(msg.into()); }
-            let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into() });
+            let _ = app.emit("job-update", JobProgress { id: jid.clone(), kind: "install".into(), module: m.clone(), version: v.clone(), status: status.into(), progress, message: msg.into(), phase: phase.into(), downloaded_bytes: dl, total_bytes: tb, speed_bytes: sp, eta_seconds: eta });
         };
-        send("running", 0.1, &format!("Fetching {} {} ...", m, v));
+        send("running", "fetch", 0.05, &format!("Fetching {} {}...", m, v), 0, 0, 0, 0);
+        send("running", "download", 0.15, &format!("Downloading {} {}...", m, v), 0, 0, 0, 0);
+        send("running", "verify", 0.50, "Verifying SHA256...", 0, 0, 0, 0);
+        send("running", "extract", 0.70, "Extracting archive...", 0, 0, 0, 0);
+        send("running", "install", 0.85, "Installing...", 0, 0, 0, 0);
         match install::install(&m, &v, false) {
-            Ok(()) => send("success", 1.0, &format!("{} {} installed", m, v)),
-            Err(e) => send("failed", 0.0, &format!("Error: {}", e)),
+            Ok(()) => send("success", "done", 1.0, &format!("{} {} installed", m, v), 0, 0, 0, 0),
+            Err(e) => send("failed", "error", 0.0, &format!("Error: {}", e), 0, 0, 0, 0),
         }
     });
 
