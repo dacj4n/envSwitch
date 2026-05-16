@@ -56,16 +56,18 @@ export default function VersionsPage() {
     catch (e) { toast.error(`${e}`); }
   };
 
-  const toggleModule = async (mod: string) => {
-    if (expanded === mod) { setExpanded(null); return; }
-    // Show immediately, search in background
-    setExpanded(mod);
-    if (!searchResults[mod]) {
-      setSearching(s => ({ ...s, [mod]: true }));
-      invoke<string[]>('search_versions', { module: mod })
-        .then(results => { setSearchResults(r => ({ ...r, [mod]: results })); setSearching(s => ({ ...s, [mod]: false })); })
-        .catch(() => { setSearchResults(r => ({ ...r, [mod]: [] })); setSearching(s => ({ ...s, [mod]: false })); });
-    }
+  const toggleModule = (mod: string) => {
+    // Expand immediately — only shows installed versions (no API call)
+    setExpanded(expanded === mod ? null : mod);
+  };
+
+  const fetchAvailable = async (mod: string) => {
+    setSearching(s => ({ ...s, [mod]: true }));
+    try {
+      const results = await invoke<string[]>('search_versions', { module: mod });
+      setSearchResults(r => ({ ...r, [mod]: results }));
+    } catch { setSearchResults(r => ({ ...r, [mod]: [] })); }
+    setSearching(s => ({ ...s, [mod]: false }));
   };
 
   return (
@@ -164,45 +166,49 @@ export default function VersionsPage() {
                     );
                   })}
 
-                  {/* Available search results */}
-                  {isSearching ? (
-                    <div className="flex items-center gap-2 px-5 py-4 text-xs text-muted-foreground">
-                      <Loader2Icon className="w-3 h-3 animate-spin" /> Searching available versions...
+                  {/* Available — explicitly fetched by user */}
+                  <div className="border-t border-border/50">
+                    <div className="flex items-center gap-2 px-5 py-3 bg-muted/5 border-b border-border/50">
+                      <CircleIcon className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Available</span>
+                      <div className="flex-1" />
+                      {results.length > 0 && <span className="text-[10px] text-muted-foreground font-mono">{results.length} found</span>}
+                      <button onClick={() => fetchAvailable(m.name)}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all border ${
+                          isSearching ? 'bg-accent/20 border-accent/30 text-accent-foreground' : 'bg-accent/50 text-accent-foreground hover:bg-accent border-border/50'
+                        }`}
+                      >
+                        {isSearching ? <Loader2Icon className="w-2.5 h-2.5 animate-spin" /> : <DownloadIcon className="w-2.5 h-2.5" />}
+                        Fetch
+                      </button>
                     </div>
-                  ) : results.length > 0 && (
-                    <>
-                      <div className="px-5 py-2 text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border/50 bg-muted/5">
-                        Available ({results.length})
-                      </div>
-                      <div className="max-h-72 overflow-y-auto">
+                    {results.length > 0 && (
+                      <div className="max-h-64 overflow-y-auto">
                         {results.slice(0, 60).map(ver => {
                           if (installedSet.has(ver)) return null;
                           const busy = installing === `${m.name}:${ver}`;
                           return (
-                            <div key={ver} className="flex items-center gap-3 px-5 py-3 border-b border-border/50 last:border-b-0 hover:bg-muted/20">
-                              <div className="w-4 flex items-center justify-center shrink-0">
-                                <CircleIcon className="w-3.5 h-3.5 text-border" />
-                              </div>
+                            <div key={ver} className="flex items-center gap-3 px-5 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/20">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono text-sm font-medium text-muted-foreground">{m.name}@{ver}</span>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-border/40 text-muted-foreground">remote</span>
-                                </div>
+                                <span className="font-mono text-sm text-muted-foreground">{m.name}@{ver}</span>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button onClick={() => doInstall(m.name, ver)} disabled={busy}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-accent/50 text-accent-foreground hover:bg-accent border border-border/50 font-medium disabled:opacity-50"
-                                >
-                                  {busy ? <Loader2Icon className="w-3 h-3 animate-spin" /> : <DownloadIcon className="w-3 h-3" />}
-                                  Install
-                                </button>
-                              </div>
+                              <button onClick={() => doInstall(m.name, ver)} disabled={busy}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-accent/50 text-accent-foreground hover:bg-accent border border-border/50 font-medium disabled:opacity-50"
+                              >
+                                {busy ? <Loader2Icon className="w-2.5 h-2.5 animate-spin" /> : <DownloadIcon className="w-2.5 h-2.5" />}
+                                Install
+                              </button>
                             </div>
                           );
                         })}
                       </div>
-                    </>
-                  )}
+                    )}
+                    {!isSearching && results.length === 0 && (
+                      <div className="px-5 py-3 text-[11px] text-muted-foreground/50 font-mono">
+                        click Fetch to load available versions
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
