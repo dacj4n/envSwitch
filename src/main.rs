@@ -68,6 +68,7 @@ fn main() {
         Commands::Init { shell } => cmd_init(&shell),
         Commands::CdHook { state } => cmd_cd_hook(&state),
         Commands::Link { module, version, path } => cmd_link(&module, &version, &path),
+        Commands::Doctor => cmd_doctor(),
     };
 
     if let Err(e) = result {
@@ -324,6 +325,117 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     eprintln!("Source line added to end of {}", zshrc.display());
     eprintln!("Shell integration ready. Run: source ~/.zshrc");
     Ok(())
+}
+
+fn cmd_doctor() -> Result<(), String> {
+    let home = infra::fs::envswitch_home();
+    let mut ok = 0;
+    let mut warn = 0;
+    let mut err = 0;
+
+    macro_rules! check {
+        ($label:expr, $cond:expr, $hint:expr) => {
+            if $cond {
+                println!("[ok] {}", $label);
+                ok += 1;
+            } else {
+                println!("[!!] {} {}", $label, $hint);
+                err += 1;
+            }
+        };
+    }
+
+    println!("envswitch doctor\n");
+    println!("Home: {}", home.display());
+    println!();
+
+    check!("shims directory exists", home.join("shims").is_dir(), "(run: envswitch init zsh)");
+    check!("init.sh exists", home.join("init.sh").exists(), "(run: envswitch init zsh)");
+
+    // PATH check
+    let path = std::env::var("PATH").unwrap_or_default();
+    check!("shims in PATH", path.contains("envswitch/shims"), "(add source ~/.envswitch/init.sh to ~/.zshrc)");
+
+    // zshrc check
+    let zshrc = dirs::home_dir().unwrap_or_default().join(".zshrc");
+    if zshrc.exists() {
+        let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
+        check!(".zshrc has source line", content.contains("source") && content.contains("init.sh"), "(run: envswitch init zsh)");
+    } else {
+        println!("[--] .zshrc not found (non-zsh shell?)");
+        warn += 1;
+    }
+
+    // brew check
+    let has_brew = std::process::Command::new("brew").arg("--version").output()
+        .map_or(false, |o| o.status.success());
+    if has_brew {
+        println!("[ok] Homebrew available");
+        ok += 1;
+    } else {
+        let hint = if cfg!(target_os = "linux") {
+            " (install Linuxbrew: https://docs.brew.sh/Homebrew-on-Linux)"
+        } else {
+            " (brew modules wont work: php/python/mysql/pgsql)"
+        };
+        println!("[--] Homebrew not found{}", hint);
+        warn += 1;
+    }
+
+    // Installed modules
+    println!();
+    let modules = module_repo::builtin_modules();
+    for m in &modules {
+        if let Ok(versions) = install::list_installed(&m.name) {
+            if versions.is_empty() {
+                println!("[--] {}: no versions installed", m.name);
+                warn += 1;
+            } else {
+                let ver_str: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
+                println!("[ok] {}: {}", m.name, ver_str.join(", "));
+                ok += 1;
+            }
+        }
+    }
+
+    // State files
+    let stack_path = home.join("state").join("stack.json");
+    if stack_path.exists() {
+        if serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(&stack_path).unwrap_or_default()
+        ).is_ok() {
+            println!("[ok] state/stack.json valid");
+            ok += 1;
+        } else {
+            println!("[!!] state/stack.json corrupted");
+            err += 1;
+        }
+    }
+
+    // Broken symlinks
+    let envs_dir = home.join("envs");
+    if envs_dir.is_dir() {
+        let mut broken = 0;
+        for entry in std::fs::read_dir(&envs_dir).into_iter().flatten().flatten() {
+            if entry.path().is_symlink() && !entry.path().exists() {
+                broken += 1;
+                println!("[!!] broken symlink: {}", entry.path().display());
+                err += 1;
+            }
+        }
+        if broken == 0 {
+            println!("[ok] no broken symlinks in envs/");
+            ok += 1;
+        }
+    }
+
+    println!();
+    println!("{} ok, {} warnings, {} errors", ok, warn, err);
+    if err > 0 {
+        Err(format!("{} issue(s) found. See above for fix instructions.", err))
+    } else {
+        Ok(())
+    }
 }
 
 fn cmd_link(module_name: &str, version: &str, path: &str) -> Result<(), String> {

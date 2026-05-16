@@ -151,4 +151,7 @@ pub enum Commands {
         /// Path to the installed software root (containing bin/)
         path: String,
     },
+
+    /// Check envswitch setup and diagnose issues
+    Doctor,
 }
