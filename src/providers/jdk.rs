@@ -40,7 +40,10 @@ impl JdkProvider {
         let mut all: BTreeSet<String> = BTreeSet::new();
         for p in &pkgs {
             if p.java_version.len() >= 3 {
-                let ver = format!("{}.{}.{}", p.java_version[0], p.java_version[1], p.java_version[2]);
+                let ver = format!(
+                    "{}.{}.{}",
+                    p.java_version[0], p.java_version[1], p.java_version[2]
+                );
                 all.insert(ver);
             }
         }
@@ -71,19 +74,31 @@ impl JdkProvider {
         // Find matching package: same java_version and latest=true
         let mut best: Option<&AzulPackage> = None;
         for p in &pkgs {
-            if p.java_version.len() < 3 { continue; }
-            if p.java_version[0] as u32 != parts.first().copied().unwrap_or(0) { continue; }
-            let pkg_ver = format!("{}.{}.{}", p.java_version[0], p.java_version[1], p.java_version[2]);
+            if p.java_version.len() < 3 {
+                continue;
+            }
+            if p.java_version[0] != parts.first().copied().unwrap_or(0) {
+                continue;
+            }
+            let pkg_ver = format!(
+                "{}.{}.{}",
+                p.java_version[0], p.java_version[1], p.java_version[2]
+            );
             if pkg_ver == target {
                 match best {
                     None => best = Some(p),
-                    Some(ref current) => {
+                    Some(current) => {
                         // Prefer .tar.gz over .zip, and latest=true
-                        let cur_score = (if current.name.ends_with(".tar.gz") { 2 } else { 1 })
-                            + (if current.latest { 1 } else { 0 });
+                        let cur_score = (if current.name.ends_with(".tar.gz") {
+                            2
+                        } else {
+                            1
+                        }) + (if current.latest { 1 } else { 0 });
                         let this_score = (if p.name.ends_with(".tar.gz") { 2 } else { 1 })
                             + (if p.latest { 1 } else { 0 });
-                        if this_score > cur_score { best = Some(p); }
+                        if this_score > cur_score {
+                            best = Some(p);
+                        }
                     }
                 }
             }
@@ -97,18 +112,29 @@ impl JdkProvider {
             });
         }
 
-        Err(format!("No JDK {} found for {}", version, platform.display()))
+        Err(format!(
+            "No JDK {} found for {}",
+            version,
+            platform.display()
+        ))
     }
 
     pub fn install(archive: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
         let name = archive.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        let fmt = if name.ends_with(".zip") { ArchiveFormat::Zip } else { ArchiveFormat::TarGz };
+        let fmt = if name.ends_with(".zip") {
+            ArchiveFormat::Zip
+        } else {
+            ArchiveFormat::TarGz
+        };
         download::extract_archive(archive, dest, &fmt)
     }
 }
 
 /// Fetch packages from Azul API. If `java_version` is None, returns ALL versions.
-fn fetch_azul_packages(platform: &Platform, java_version: Option<u32>) -> Result<Vec<AzulPackage>, String> {
+fn fetch_azul_packages(
+    platform: &Platform,
+    java_version: Option<u32>,
+) -> Result<Vec<AzulPackage>, String> {
     let os = match platform {
         Platform::MacAarch64 | Platform::MacX64 => "macos",
         Platform::LinuxX64 | Platform::LinuxAarch64 => "linux",
@@ -130,7 +156,8 @@ fn fetch_azul_packages(platform: &Platform, java_version: Option<u32>) -> Result
 
     let mut cmd = std::process::Command::new("curl");
     crate::config::apply_proxy(&mut cmd);
-    let out = cmd.args(["-sL", "--connect-timeout", "10", &url])
+    let out = cmd
+        .args(["-sL", "--connect-timeout", "10", &url])
         .output()
         .map_err(|e| format!("curl: {}", e))?;
 

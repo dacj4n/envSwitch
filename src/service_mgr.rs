@@ -16,7 +16,10 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
         return Err(format!("{} is not a service module.", module_name));
     }
 
-    let install_path = fs::envswitch_home().join("envs").join(module_name).join(version);
+    let install_path = fs::envswitch_home()
+        .join("envs")
+        .join(module_name)
+        .join(version);
     if !install_path.exists() {
         return Err(format!(
             "{} {} is not installed. Run 'envswitch install {} {}' first.",
@@ -36,13 +39,11 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
 
     // Check port
     let port = module.default_port.unwrap_or(3306);
-    if let Ok(occupied) = check_port(port) {
-        if let Some(info) = occupied {
-            return Err(format!(
-                "Port {} is already in use by process '{}' (PID: {})",
-                port, info.command, info.pid
-            ));
-        }
+    if let Ok(Some(info)) = check_port(port) {
+        return Err(format!(
+            "Port {} is already in use by process '{}' (PID: {})",
+            port, info.command, info.pid
+        ));
     }
 
     let data_dir = get_data_dir(module_name, version);
@@ -59,23 +60,38 @@ pub fn start(module_name: &str, version: &str) -> Result<RunningService, String>
         "mysql" => {
             crate::providers::mysql::MySqlProvider::init_data_dir(&install_path, &data_dir)?;
             let mut svc = crate::providers::mysql::MySqlProvider::start_service(
-                &install_path, &data_dir, port, &socket,
+                &install_path,
+                &data_dir,
+                port,
+                &socket,
             )?;
             svc.version = version.to_string();
             fs::write_pid_file(module_name, svc.pid)
                 .map_err(|e| format!("Cannot write PID file: {}", e))?;
-            eprintln!("{} {} started (PID: {}, port: {})", module_name, version, svc.pid, svc.port);
+            eprintln!(
+                "{} {} started (PID: {}, port: {})",
+                module_name, version, svc.pid, svc.port
+            );
             Ok(svc)
         }
         "pgsql" => {
-            crate::providers::postgresql::PostgresqlProvider::init_data_dir(&install_path, &data_dir)?;
+            crate::providers::postgresql::PostgresqlProvider::init_data_dir(
+                &install_path,
+                &data_dir,
+            )?;
             let mut svc = crate::providers::postgresql::PostgresqlProvider::start_service(
-                &install_path, &data_dir, port, &socket,
+                &install_path,
+                &data_dir,
+                port,
+                &socket,
             )?;
             svc.version = version.to_string();
             fs::write_pid_file(module_name, svc.pid)
                 .map_err(|e| format!("Cannot write PID file: {}", e))?;
-            eprintln!("{} {} started (PID: {}, port: {})", module_name, version, svc.pid, svc.port);
+            eprintln!(
+                "{} {} started (PID: {}, port: {})",
+                module_name, version, svc.pid, svc.port
+            );
             Ok(svc)
         }
         _ => Err(format!("No service adapter for: {}", module_name)),
@@ -192,7 +208,10 @@ pub struct PortInfo {
 
 /// Read service logs.
 fn get_data_dir(module_name: &str, version: &str) -> std::path::PathBuf {
-    fs::envswitch_home().join("data").join(module_name).join(version)
+    fs::envswitch_home()
+        .join("data")
+        .join(module_name)
+        .join(version)
 }
 
 pub fn logs(module_name: &str, lines: usize) -> Result<Vec<String>, String> {

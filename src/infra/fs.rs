@@ -45,7 +45,10 @@ pub fn save_installed(module_name: &str, meta: &InstalledMetadata) -> io::Result
 }
 
 fn metadata_path(module_name: &str) -> PathBuf {
-    envswitch_home().join("envs").join(module_name).join("metadata.json")
+    envswitch_home()
+        .join("envs")
+        .join(module_name)
+        .join("metadata.json")
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

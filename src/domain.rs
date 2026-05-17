@@ -32,7 +32,7 @@ pub enum CoverScope {
 
 impl CoverScope {
     #[allow(dead_code)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "session" => Some(CoverScope::Session),
             "global" => Some(CoverScope::Global),
@@ -109,8 +109,12 @@ pub trait RuntimeProvider {
 #[allow(dead_code)]
 pub trait ServiceAdapter {
     fn init_data_dir(&self, install_path: &Path, data_dir: &Path) -> Result<(), String>;
-    fn start(&self, install_path: &Path, data_dir: &Path, port: u16)
-        -> Result<RunningService, String>;
+    fn start(
+        &self,
+        install_path: &Path,
+        data_dir: &Path,
+        port: u16,
+    ) -> Result<RunningService, String>;
     fn stop(&self, service: &RunningService) -> Result<(), String>;
     fn is_running(&self, data_dir: &Path) -> bool;
     fn read_logs(&self, data_dir: &Path, lines: usize) -> Result<Vec<String>, String>;

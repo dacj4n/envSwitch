@@ -123,8 +123,11 @@ fn test_init_project() {
         .output()
         .expect("Failed to execute");
 
-    assert!(output.status.success(),
-        "Failed: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "Failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(project_dir.join(".envswitchrc").exists());
     let _ = fs::remove_dir_all(&home);
 }
@@ -224,7 +227,10 @@ fn test_init_command() {
     assert!(home.join("init.sh").exists(), "init.sh not created");
     assert!(home.join(".zshrc").exists(), ".zshrc not created");
     let zshrc_content = std::fs::read_to_string(home.join(".zshrc")).unwrap();
-    assert!(zshrc_content.contains("source"), ".zshrc should have source line");
+    assert!(
+        zshrc_content.contains("source"),
+        ".zshrc should have source line"
+    );
     let _ = fs::remove_dir_all(&home);
 }
 
@@ -290,8 +296,13 @@ fn test_cover_switch_same_module() {
     let out = ok(&["cover", "jdk", "21"], &home);
     assert!(out.contains("jdk/21"));
     let status = ok(&["status"], &home);
-    // Should have only 1 jdk entry (21), not 2
-    assert!(status.contains("21") && !status.contains("17"));
+    // Should have only 1 jdk entry (21), not 2 — check by word, not substring
+    assert!(status
+        .lines()
+        .any(|l| l.contains("jdk") && l.split_whitespace().any(|w| w == "21")));
+    assert!(!status
+        .lines()
+        .any(|l| l.contains("jdk") && l.split_whitespace().any(|w| w == "17")));
 
     let _ = fs::remove_dir_all(&home);
 }
@@ -327,6 +338,7 @@ fn test_service_status_not_installed() {
 }
 
 #[test]
+#[ignore = "requires network access to Azul/go.dev APIs"]
 fn test_search_output_format() {
     let home = test_home("search_fmt");
     // search should not error for supported modules

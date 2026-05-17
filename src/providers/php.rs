@@ -8,10 +8,15 @@ pub struct PhpProvider;
 
 impl PhpProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+            "/opt/homebrew/bin/brew"
+        } else {
+            "brew"
+        };
         let mut cmd = std::process::Command::new(brew);
         crate::config::apply_proxy(&mut cmd);
-        let output = cmd.args(["search", "php"])
+        let output = cmd
+            .args(["search", "php"])
             .output()
             .map_err(|_| "Homebrew not found. Install from https://brew.sh".to_string())?;
 
@@ -22,7 +27,7 @@ impl PhpProvider {
             let line = line.trim();
             if let Some(ver) = line.split("php@").nth(1) {
                 let ver = ver.split_whitespace().next().unwrap_or(ver);
-                if !ver.is_empty() && ver.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+                if !ver.is_empty() && ver.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                     versions.insert(ver.to_string());
                 }
             }
@@ -35,21 +40,30 @@ impl PhpProvider {
         result.sort_by(|a, b| b.version.cmp(&a.version));
 
         if result.is_empty() {
-            return Err("No PHP versions found. Tap shivammathur: brew tap shivammathur/php".into());
+            return Err(
+                "No PHP versions found. Tap shivammathur: brew tap shivammathur/php".into(),
+            );
         }
         Ok(result)
     }
 
     /// Install PHP via Homebrew and symlink into envswitch.
     /// Returns the actual installed version (may differ from requested).
+    #[allow(dead_code)]
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
         Self::install_log(version, dest, None)
     }
-    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
+    pub fn install_log(
+        version: &str,
+        dest: &std::path::Path,
+        log_tx: Option<&std::sync::mpsc::Sender<String>>,
+    ) -> Result<String, String> {
         let formula = determine_formula(version)?;
 
         let msg = format!("brew install --force {}", formula);
-        if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+        if let Some(tx) = log_tx {
+            let _ = tx.send(msg.clone());
+        }
         eprintln!("{}", msg);
         let mut cmd = std::process::Command::new("brew");
         crate::config::apply_proxy(&mut cmd);
@@ -60,28 +74,51 @@ impl PhpProvider {
             let mut child = cmd.spawn().map_err(|e| format!("brew: {}", e))?;
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
-            let tx1 = tx.clone(); let tx2 = tx.clone();
-            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stdout).lines().flatten() { let _ = tx1.send(l); } });
-            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stderr).lines().flatten() { let _ = tx2.send(l); } });
+            let tx1 = tx.clone();
+            let tx2 = tx.clone();
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for l in std::io::BufReader::new(stdout)
+                    .lines()
+                    .map_while(Result::ok)
+                {
+                    let _ = tx1.send(l);
+                }
+            });
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for l in std::io::BufReader::new(stderr)
+                    .lines()
+                    .map_while(Result::ok)
+                {
+                    let _ = tx2.send(l);
+                }
+            });
             let status = child.wait().map_err(|e| format!("brew wait: {}", e))?;
-            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+            if !status.success() {
+                eprintln!("brew link had conflicts (ignored)");
+            }
         } else {
             cmd.stdout(std::process::Stdio::inherit());
             cmd.stderr(std::process::Stdio::inherit());
             let status = cmd.status().map_err(|e| format!("brew install: {}", e))?;
-            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+            if !status.success() {
+                eprintln!("brew link had conflicts (ignored)");
+            }
         }
 
         // Get actual installed version from brew
         let actual_version = get_formula_version(&formula)?;
         if actual_version != version {
-            eprintln!("Note: installed version is {} (requested {})", actual_version, version);
+            eprintln!(
+                "Note: installed version is {} (requested {})",
+                actual_version, version
+            );
         }
 
         link_brew_to_envswitch(&formula, dest)?;
         Ok(actual_version)
     }
-
 }
 
 fn determine_formula(version: &str) -> Result<String, String> {
@@ -90,31 +127,42 @@ fn determine_formula(version: &str) -> Result<String, String> {
 
     // Check core formula first
     let core = format!("php@{}", base);
-    if brew_exists(&core) { return Ok(core); }
+    if brew_exists(&core) {
+        return Ok(core);
+    }
 
     // Check shivammathur tap
     let tap = format!("shivammathur/php/php@{}", base);
-    if brew_exists(&tap) { return Ok(tap); }
+    if brew_exists(&tap) {
+        return Ok(tap);
+    }
 
     // Build full version string with variant: 7.0.33-zts
     // Check if the full version (with variant suffix) matches a formula
     if version != base && version.contains('-') {
-        let variant = version.splitn(2, '-').nth(1).unwrap_or("");
+        let variant = version.split_once('-').map(|x| x.1).unwrap_or("");
         let core_var = format!("php@{}-{}", base, variant);
-        if brew_exists(&core_var) { return Ok(core_var); }
+        if brew_exists(&core_var) {
+            return Ok(core_var);
+        }
         let tap_var = format!("shivammathur/php/php@{}-{}", base, variant);
-        if brew_exists(&tap_var) { return Ok(tap_var); }
+        if brew_exists(&tap_var) {
+            return Ok(tap_var);
+        }
     }
 
     // Default: use the tap (shivammathur for old versions)
-    if brew_exists(&tap) { return Ok(tap); }
+    if brew_exists(&tap) {
+        return Ok(tap);
+    }
     Ok(core)
 }
 
 fn get_formula_version(formula: &str) -> Result<String, String> {
     let mut cmd = std::process::Command::new("brew");
     crate::config::apply_proxy(&mut cmd);
-    let output = cmd.args(["info", "--json=v2", formula])
+    let output = cmd
+        .args(["info", "--json=v2", formula])
         .output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
@@ -141,7 +189,10 @@ fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), S
 
     let brew_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if brew_path.is_empty() {
-        return Err(format!("Could not find Homebrew install path for {}", formula));
+        return Err(format!(
+            "Could not find Homebrew install path for {}",
+            formula
+        ));
     }
 
     let _ = std::fs::create_dir_all(dest);
@@ -154,8 +205,14 @@ fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), S
         return Err(format!("{} installed but no bin/ directory found", formula));
     }
 
-    std::os::unix::fs::symlink(&brew_bin, &dest_bin)
-        .map_err(|e| format!("symlink {} -> {} failed: {}", brew_bin.display(), dest_bin.display(), e))?;
+    std::os::unix::fs::symlink(&brew_bin, &dest_bin).map_err(|e| {
+        format!(
+            "symlink {} -> {} failed: {}",
+            brew_bin.display(),
+            dest_bin.display(),
+            e
+        )
+    })?;
 
     // Also link sbin if it exists
     let brew_sbin = std::path::PathBuf::from(&brew_path).join("sbin");

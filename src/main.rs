@@ -23,10 +23,26 @@ fn main() {
     let result = match cli.command {
         Commands::List { module } => cmd_list(module),
         Commands::Search { module, refresh } => cmd_search(&module, refresh),
-        Commands::Install { module, version, force } => crate::install::install(&module, &version, force),
-        Commands::Uninstall { module, version, purge } => crate::install::uninstall(&module, &version, purge),
-        Commands::Cover { module, version, global } => {
-            let scope = if global { CoverScope::Global } else { CoverScope::Session };
+        Commands::Install {
+            module,
+            version,
+            force,
+        } => crate::install::install(&module, &version, force),
+        Commands::Uninstall {
+            module,
+            version,
+            purge,
+        } => crate::install::uninstall(&module, &version, purge),
+        Commands::Cover {
+            module,
+            version,
+            global,
+        } => {
+            let scope = if global {
+                CoverScope::Global
+            } else {
+                CoverScope::Session
+            };
             cmd_cover(&module, &version, scope)
         }
         Commands::Uncover { module, all } => {
@@ -42,12 +58,12 @@ fn main() {
                     cmd_uncover(&m)
                 }
             } else {
-                let names: Vec<String> = crate::environment::get_status().iter()
-                    .map(|c| c.module_name.clone()).collect();
+                let names: Vec<String> = crate::environment::get_status()
+                    .iter()
+                    .map(|c| c.module_name.clone())
+                    .collect();
                 if names.is_empty() {
-                    Err(format!(
-                        "No active covers.\nUsage: envswitch uncover <module>   or   envswitch uncover --all"
-                    ))
+                    Err("No active covers.\nUsage: envswitch uncover <module>   or   envswitch uncover --all".to_string())
                 } else {
                     Err(format!(
                         "Specify a module to uncover.\nActive: {}\nUsage: envswitch uncover <module>   or   envswitch uncover --all",
@@ -57,11 +73,21 @@ fn main() {
             }
         }
         Commands::Status => cmd_status(),
-        Commands::Export { module: _, version: _, global } => {
-            let _scope = if global { CoverScope::Global } else { CoverScope::Session };
+        Commands::Export {
+            module: _,
+            version: _,
+            global,
+        } => {
+            let _scope = if global {
+                CoverScope::Global
+            } else {
+                CoverScope::Session
+            };
             Err("export command is handled by shell function".into())
-        },
-        Commands::Start { module, version } => crate::service_mgr::start(&module, &version).map(|_| ()),
+        }
+        Commands::Start { module, version } => {
+            crate::service_mgr::start(&module, &version).map(|_| ())
+        }
         Commands::Stop { module } => crate::service_mgr::stop(&module),
         Commands::ServiceStatus => cmd_service_status(),
         Commands::Logs { module, lines } => cmd_logs(&module, lines),
@@ -69,9 +95,16 @@ fn main() {
         Commands::InitProject => crate::project::init_project(&std::env::current_dir().unwrap()),
         Commands::Init { shell } => cmd_init(&shell),
         Commands::CdHook { state } => cmd_cd_hook(&state),
-        Commands::Link { module, version, path } => cmd_link(&module, &version, &path),
+        Commands::Link {
+            module,
+            version,
+            path,
+        } => cmd_link(&module, &version, &path),
         Commands::Doctor => cmd_doctor(),
-        Commands::LoadGlobals => { print!("{}", crate::environment::render_global_env()); Ok(()) }
+        Commands::LoadGlobals => {
+            print!("{}", crate::environment::render_global_env());
+            Ok(())
+        }
     };
 
     if let Err(e) = result {
@@ -95,11 +128,18 @@ fn cmd_list(module: Option<String>) -> Result<(), String> {
             let installed = crate::install::list_installed(&name)?;
             if installed.is_empty() {
                 println!("  Installed versions: (none)");
-                println!("  Run 'envswitch remote {}' to see available versions.", name);
+                println!(
+                    "  Run 'envswitch remote {}' to see available versions.",
+                    name
+                );
             } else {
                 println!("  Installed versions:");
                 for v in &installed {
-                    let marker = if active.map_or(false, |a| a.version == v.version) { " [active]" } else { "" };
+                    let marker = if active.is_some_and(|a| a.version == v.version) {
+                        " [active]"
+                    } else {
+                        ""
+                    };
                     println!("    {} ({}){}", v.version, v.install_path.display(), marker);
                 }
             }
@@ -111,20 +151,35 @@ fn cmd_list(module: Option<String>) -> Result<(), String> {
                 println!("No modules available.");
                 return Ok(());
             }
-            println!("{:<12} {:<25} {:<10} {}", "MODULE", "NAME", "TYPE", "VERSIONS");
+            println!("{:<12} {:<25} {:<10} VERSIONS", "MODULE", "NAME", "TYPE");
             println!("{}", "-".repeat(70));
             for m in &modules {
-                let active_version = status.iter()
+                let active_version = status
+                    .iter()
                     .find(|c| c.module_name == m.name)
                     .map(|c| c.version.as_str());
-                let ver_str: String = installed_all.iter()
+                let ver_str: String = installed_all
+                    .iter()
                     .filter(|v| v.module_name == m.name)
-                    .map(|v| if active_version == Some(v.version.as_str()) { format!("{}*", v.version) } else { v.version.clone() })
+                    .map(|v| {
+                        if active_version == Some(v.version.as_str()) {
+                            format!("{}*", v.version)
+                        } else {
+                            v.version.clone()
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
-                println!("{:<12} {:<25} {:<10} {}",
-                    m.name, m.display_name, format!("{:?}", m.category),
-                    if ver_str.is_empty() { "-".into() } else { ver_str }
+                println!(
+                    "{:<12} {:<25} {:<10} {}",
+                    m.name,
+                    m.display_name,
+                    format!("{:?}", m.category),
+                    if ver_str.is_empty() {
+                        "-".into()
+                    } else {
+                        ver_str
+                    }
                 );
             }
             if installed_all.is_empty() {
@@ -159,39 +214,59 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
         "node" => {
             eprintln!("Fetching Node versions from nodejs.org...");
             let versions = crate::providers::node::NodeProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
         "go" => {
             eprintln!("Fetching Go versions from go.dev...");
             let versions = crate::providers::go::GoProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
         "jdk" => {
             eprintln!("Fetching JDK versions from Azul Zulu...");
             let versions = crate::providers::jdk::JdkProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v); }
+            for v in &versions {
+                println!("  {}", v);
+            }
         }
         "mysql" => {
             eprintln!("MySQL versions available via Homebrew:");
             let versions = crate::providers::mysql::MySqlProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
         "pgsql" => {
             eprintln!("PostgreSQL versions available via Homebrew:");
-            let versions = crate::providers::postgresql::PostgresqlProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            let versions =
+                crate::providers::postgresql::PostgresqlProvider::fetch_remote_versions()?;
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
         "php" => {
             eprintln!("PHP versions available via Homebrew:");
             let versions = crate::providers::php::PhpProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
         "python" => {
             eprintln!("Python versions available via Homebrew:");
             let versions = crate::providers::python::PythonProvider::fetch_remote_versions()?;
-            for v in &versions { println!("  {}", v.version); }
+            for v in &versions {
+                println!("  {}", v.version);
+            }
         }
-        _ => return Err(format!("Unknown module: {}. Use 'envswitch list'.", module_name)),
+        _ => {
+            return Err(format!(
+                "Unknown module: {}. Use 'envswitch list'.",
+                module_name
+            ))
+        }
     }
     Ok(())
 }
@@ -203,7 +278,10 @@ fn cmd_cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), 
     };
 
     eprintln!("{} {} covered ({})", module_name, version, scope_str);
-    print!("{}", crate::environment::cover(module_name, version, scope)?);
+    print!(
+        "{}",
+        crate::environment::cover(module_name, version, scope)?
+    );
     Ok(())
 }
 
@@ -225,10 +303,14 @@ fn cmd_status() -> Result<(), String> {
         println!("No active covers.");
     } else {
         println!("Stack (order: last = highest priority in PATH):");
-        println!("{:<3} {:<12} {:<12} {:<12} {}", "#", "MODULE", "VERSION", "SCOPE", "APPLIED");
+        println!(
+            "{:<3} {:<12} {:<12} {:<12} APPLIED",
+            "#", "MODULE", "VERSION", "SCOPE"
+        );
         println!("{}", "-".repeat(70));
         for (i, c) in covers.iter().enumerate() {
-            println!("{:<3} {:<12} {:<12} {:<12} {}",
+            println!(
+                "{:<3} {:<12} {:<12} {:<12} {}",
                 i + 1,
                 c.module_name,
                 c.version,
@@ -248,12 +330,12 @@ fn cmd_service_status() -> Result<(), String> {
         println!("No services configured.");
         return Ok(());
     }
-    println!("{:<12} {:<12} {:<10} {}", "SERVICE", "STATUS", "PID", "PORT");
+    println!("{:<12} {:<12} {:<10} PORT", "SERVICE", "STATUS", "PID");
     println!("{}", "-".repeat(50));
     for (name, status) in &all {
         match &status.running {
             Some(s) => println!("{:<12} {:<12} {:<10} {}", name, "Running", s.pid, s.port),
-            None => println!("{:<12} {:<12} {:<10} {}", name, "Stopped", "-", "-"),
+            None => println!("{:<12} {:<12} {:<10} -", name, "Stopped", "-"),
         }
     }
     Ok(())
@@ -279,16 +361,19 @@ fn cmd_logs(module_name: &str, lines: usize) -> Result<(), String> {
 
 fn cmd_auto() -> Result<(), String> {
     let cwd = std::env::current_dir().map_err(|e| format!("Cannot get current dir: {}", e))?;
-    let config = crate::project::load_config(&cwd)?
-        .ok_or_else(|| ".envswitchrc not found. Run 'envswitch init-project' to create one.".to_string())?;
+    let config = crate::project::load_config(&cwd)?.ok_or_else(|| {
+        ".envswitchrc not found. Run 'envswitch init-project' to create one.".to_string()
+    })?;
 
     // Apply all covers to stack (suppress per-cover output by not printing)
     for (mod_name, version) in &config.dependencies {
         let _ = crate::environment::cover(mod_name, version, CoverScope::Session);
     }
 
-    let mod_list: Vec<String> = crate::environment::get_status().iter()
-        .map(|c| format!("{} {}", c.module_name, c.version)).collect();
+    let mod_list: Vec<String> = crate::environment::get_status()
+        .iter()
+        .map(|c| format!("{} {}", c.module_name, c.version))
+        .collect();
     eprintln!("Project environment ready: {}", mod_list.join(", "));
 
     // Output final full env rebuilt from stack
@@ -297,13 +382,12 @@ fn cmd_auto() -> Result<(), String> {
 }
 
 fn cmd_init(_shell_type: &str) -> Result<(), String> {
-    let bin_path = std::env::current_exe()
-        .map_err(|e| format!("Cannot determine binary path: {}", e))?;
+    let bin_path =
+        std::env::current_exe().map_err(|e| format!("Cannot determine binary path: {}", e))?;
 
     let init_script = crate::shell::render_init(&bin_path.to_string_lossy());
     let init_path = crate::infra::fs::envswitch_home().join("init.sh");
-    std::fs::write(&init_path, &init_script)
-        .map_err(|e| format!("Cannot write init.sh: {}", e))?;
+    std::fs::write(&init_path, &init_script).map_err(|e| format!("Cannot write init.sh: {}", e))?;
 
     // Create shims and config directories
     let _ = std::fs::create_dir_all(crate::infra::fs::envswitch_home().join("shims"));
@@ -315,7 +399,8 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     }
 
     // Auto-write source line to ~/.zshrc (idempotent — only once)
-    let home = std::env::var("HOME").ok()
+    let home = std::env::var("HOME")
+        .ok()
         .map(std::path::PathBuf::from)
         .or_else(dirs::home_dir)
         .ok_or("Cannot find home dir")?;
@@ -323,7 +408,8 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
     let source_line = format!("source {}", init_path.display());
     let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
     // Remove old envSwitch lines, then add at END (for PATH priority)
-    let clean: String = content.lines()
+    let clean: String = content
+        .lines()
         .filter(|l| !l.contains(&source_line) && !l.trim().eq("# envSwitch"))
         .collect::<Vec<_>>()
         .join("\n");
@@ -357,26 +443,44 @@ fn cmd_doctor() -> Result<(), String> {
     println!("Home: {}", home.display());
     println!();
 
-    check!("shims directory exists", home.join("shims").is_dir(), "(run: envswitch init zsh)");
-    check!("init.sh exists", home.join("init.sh").exists(), "(run: envswitch init zsh)");
+    check!(
+        "shims directory exists",
+        home.join("shims").is_dir(),
+        "(run: envswitch init zsh)"
+    );
+    check!(
+        "init.sh exists",
+        home.join("init.sh").exists(),
+        "(run: envswitch init zsh)"
+    );
 
     // PATH check
     let path = std::env::var("PATH").unwrap_or_default();
-    check!("shims in PATH", path.contains("envswitch/shims"), "(add source ~/.envswitch/init.sh to ~/.zshrc)");
+    check!(
+        "shims in PATH",
+        path.contains("envswitch/shims"),
+        "(add source ~/.envswitch/init.sh to ~/.zshrc)"
+    );
 
     // zshrc check
     let zshrc = dirs::home_dir().unwrap_or_default().join(".zshrc");
     if zshrc.exists() {
         let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
-        check!(".zshrc has source line", content.contains("source") && content.contains("init.sh"), "(run: envswitch init zsh)");
+        check!(
+            ".zshrc has source line",
+            content.contains("source") && content.contains("init.sh"),
+            "(run: envswitch init zsh)"
+        );
     } else {
         println!("[--] .zshrc not found (non-zsh shell?)");
         warn += 1;
     }
 
     // brew check
-    let has_brew = std::process::Command::new("brew").arg("--version").output()
-        .map_or(false, |o| o.status.success());
+    let has_brew = std::process::Command::new("brew")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
     if has_brew {
         println!("[ok] Homebrew available");
         ok += 1;
@@ -410,8 +514,10 @@ fn cmd_doctor() -> Result<(), String> {
     let stack_path = home.join("state").join("stack.json");
     if stack_path.exists() {
         if serde_json::from_str::<serde_json::Value>(
-            &std::fs::read_to_string(&stack_path).unwrap_or_default()
-        ).is_ok() {
+            &std::fs::read_to_string(&stack_path).unwrap_or_default(),
+        )
+        .is_ok()
+        {
             println!("[ok] state/stack.json valid");
             ok += 1;
         } else {
@@ -440,7 +546,10 @@ fn cmd_doctor() -> Result<(), String> {
     println!();
     println!("{} ok, {} warnings, {} errors", ok, warn, err);
     if err > 0 {
-        Err(format!("{} issue(s) found. See above for fix instructions.", err))
+        Err(format!(
+            "{} issue(s) found. See above for fix instructions.",
+            err
+        ))
     } else {
         Ok(())
     }
@@ -452,24 +561,38 @@ fn cmd_link(module_name: &str, version: &str, path: &str) -> Result<(), String> 
         return Err(format!("Path not found: {}", path));
     }
     if !src.join("bin").exists() && !src.join("Contents").join("Home").join("bin").exists() {
-        return Err(format!("No bin/ directory found at {}. Expected a software root.", path));
+        return Err(format!(
+            "No bin/ directory found at {}. Expected a software root.",
+            path
+        ));
     }
 
-    let dest = crate::infra::fs::envswitch_home().join("envs").join(module_name).join(version);
+    let dest = crate::infra::fs::envswitch_home()
+        .join("envs")
+        .join(module_name)
+        .join(version);
     if dest.exists() {
-        return Err(format!("{} {} is already installed at {}", module_name, version, dest.display()));
+        return Err(format!(
+            "{} {} is already installed at {}",
+            module_name,
+            version,
+            dest.display()
+        ));
     }
 
     let _ = std::fs::create_dir_all(dest.parent().unwrap());
-    std::os::unix::fs::symlink(&src, &dest)
-        .map_err(|e| format!("symlink: {}", e))?;
+    std::os::unix::fs::symlink(&src, &dest).map_err(|e| format!("symlink: {}", e))?;
 
     // Write metadata
-    let meta_path = crate::infra::fs::envswitch_home().join("envs").join(module_name).join("metadata.json");
+    let meta_path = crate::infra::fs::envswitch_home()
+        .join("envs")
+        .join(module_name)
+        .join("metadata.json");
     let mut meta = if meta_path.exists() {
         serde_json::from_str::<crate::domain::InstalledMetadata>(
-            &std::fs::read_to_string(&meta_path).unwrap_or_default()
-        ).unwrap_or(crate::domain::InstalledMetadata { versions: vec![] })
+            &std::fs::read_to_string(&meta_path).unwrap_or_default(),
+        )
+        .unwrap_or(crate::domain::InstalledMetadata { versions: vec![] })
     } else {
         crate::domain::InstalledMetadata { versions: vec![] }
     };
@@ -482,8 +605,11 @@ fn cmd_link(module_name: &str, version: &str, path: &str) -> Result<(), String> 
         size_bytes: 0,
     });
     let _ = std::fs::create_dir_all(meta_path.parent().unwrap());
-    std::fs::write(&meta_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
-        .map_err(|e| format!("write metadata: {}", e))?;
+    std::fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    )
+    .map_err(|e| format!("write metadata: {}", e))?;
 
     eprintln!("{} {} linked from {}", module_name, version, src.display());
     eprintln!("Now run: envswitch cover {} {}", module_name, version);
@@ -505,7 +631,7 @@ fn cmd_cd_hook(state: &str) -> Result<(), String> {
             std::fs::write(&hook_file, "off").map_err(|e| format!("write: {}", e))?;
             eprintln!("cd-hook disabled.");
         }
-        _ => return Err(format!("Usage: envswitch cd-hook on|off")),
+        _ => return Err("Usage: envswitch cd-hook on|off".to_string()),
     }
     Ok(())
 }

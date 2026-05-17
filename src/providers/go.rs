@@ -2,10 +2,16 @@ use crate::domain::RemoteVersion;
 use crate::platform::Platform;
 use serde::Deserialize;
 #[derive(Debug, Deserialize)]
-struct GoFile { filename: String, sha256: String }
+struct GoFile {
+    filename: String,
+    sha256: String,
+}
 
 #[derive(Debug, Deserialize)]
-struct GoVersion { version: String, files: Vec<GoFile> }
+struct GoVersion {
+    version: String,
+    files: Vec<GoFile>,
+}
 
 pub struct GoProvider;
 
@@ -20,7 +26,10 @@ impl GoProvider {
         // Check cache (1 hour TTL)
         let platform = Platform::current();
         if let Some(cached) = read_remote_cache(&platform) {
-            return Ok(cached.into_iter().map(|v| RemoteVersion { version: v }).collect());
+            return Ok(cached
+                .into_iter()
+                .map(|v| RemoteVersion { version: v })
+                .collect());
         }
 
         let data = fetch_json()?;
@@ -33,15 +42,19 @@ impl GoProvider {
             let target_os = current.go_os();
             let target_arch = current.go_arch();
             for f in &v.files {
-                if f.filename.contains(target_os) && f.filename.contains(target_arch)
-                    && f.filename.ends_with(".tar.gz") {
+                if f.filename.contains(target_os)
+                    && f.filename.contains(target_arch)
+                    && f.filename.ends_with(".tar.gz")
+                {
                     versions.push(RemoteVersion { version: ver_str });
                     break;
                 }
             }
         }
 
-        if versions.is_empty() { return Err("No Go versions found".into()); }
+        if versions.is_empty() {
+            return Err("No Go versions found".into());
+        }
 
         // Cache the version strings
         let version_strs: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
@@ -60,7 +73,10 @@ impl GoProvider {
         for v in &data {
             if v.version == search {
                 for f in &v.files {
-                    if f.filename.contains(os) && f.filename.contains(arch) && f.filename.ends_with(".tar.gz") {
+                    if f.filename.contains(os)
+                        && f.filename.contains(arch)
+                        && f.filename.ends_with(".tar.gz")
+                    {
                         return Ok(GoAsset {
                             download_url: format!("https://go.dev/dl/{}", f.filename),
                             checksum: f.sha256.clone(),
@@ -72,16 +88,26 @@ impl GoProvider {
         }
 
         // List what IS available
-        let available: Vec<String> = data.iter()
+        let available: Vec<String> = data
+            .iter()
             .filter(|v| v.version == search)
-            .flat_map(|v| v.files.iter().map(|f| go_file_platform(&f.filename).unwrap_or_else(|| f.filename.clone())).collect::<Vec<_>>())
+            .flat_map(|v| {
+                v.files
+                    .iter()
+                    .map(|f| go_file_platform(&f.filename).unwrap_or_else(|| f.filename.clone()))
+                    .collect::<Vec<_>>()
+            })
             .collect();
 
         Err(if available.is_empty() {
             format!("No Go {} binary found for {}", version, platform.display())
         } else {
-            format!("Go {} is not available for {}.\nAvailable platforms: {}",
-                version, platform.display(), available.join(", "))
+            format!(
+                "Go {} is not available for {}.\nAvailable platforms: {}",
+                version,
+                platform.display(),
+                available.join(", ")
+            )
         })
     }
 
@@ -92,7 +118,8 @@ impl GoProvider {
 
 /// Extract platform tag from Go filename like "go1.11.1.linux-amd64.tar.gz"
 fn go_file_platform(filename: &str) -> Option<String> {
-    let name = filename.strip_suffix(".tar.gz")
+    let name = filename
+        .strip_suffix(".tar.gz")
         .or_else(|| filename.strip_suffix(".zip"))
         .or_else(|| filename.strip_suffix(".msi"))
         .or_else(|| filename.strip_suffix(".pkg"))?;
@@ -125,10 +152,13 @@ fn go_file_platform(filename: &str) -> Option<String> {
 fn fetch_json() -> Result<Vec<GoVersion>, String> {
     let mut cmd = std::process::Command::new("curl");
     crate::config::apply_proxy(&mut cmd);
-    let output = cmd.args(["-sL", "https://go.dev/dl/?mode=json&include=all"])
+    let output = cmd
+        .args(["-sL", "https://go.dev/dl/?mode=json&include=all"])
         .output()
         .map_err(|e| format!("curl failed: {}", e))?;
-    if !output.status.success() { return Err("Failed to fetch Go versions".into()); }
+    if !output.status.success() {
+        return Err("Failed to fetch Go versions".into());
+    }
     let text = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(&text).map_err(|e| format!("JSON parse error: {}", e))
 }

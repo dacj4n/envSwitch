@@ -10,10 +10,15 @@ pub struct MySqlProvider;
 
 impl MySqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+            "/opt/homebrew/bin/brew"
+        } else {
+            "brew"
+        };
         let mut cmd = std::process::Command::new(brew_path);
         crate::config::apply_proxy(&mut cmd);
-        let output = cmd.args(["search", "mysql"])
+        let output = cmd
+            .args(["search", "mysql"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
 
@@ -37,8 +42,10 @@ impl MySqlProvider {
             }
         }
 
-        let mut sorted: Vec<RemoteVersion> = versions.into_iter()
-            .map(|v| RemoteVersion { version: v }).collect();
+        let mut sorted: Vec<RemoteVersion> = versions
+            .into_iter()
+            .map(|v| RemoteVersion { version: v })
+            .collect();
         sorted.sort_by(|a, b| b.version.cmp(&a.version));
 
         if sorted.is_empty() {
@@ -47,10 +54,15 @@ impl MySqlProvider {
         Ok(sorted)
     }
 
+    #[allow(dead_code)]
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
         Self::install_log(version, dest, None)
     }
-    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
+    pub fn install_log(
+        version: &str,
+        dest: &std::path::Path,
+        log_tx: Option<&std::sync::mpsc::Sender<String>>,
+    ) -> Result<String, String> {
         let formula = if version.starts_with("9.") || !version.contains('.') {
             "mysql".to_string()
         } else {
@@ -80,16 +92,27 @@ impl MySqlProvider {
         eprintln!("Initializing MySQL data directory...");
         let mysqld = find_mysqld(install_path)?;
         let status = Command::new(&mysqld)
-            .args(["--initialize-insecure", &format!("--datadir={}", data_dir.display())])
+            .args([
+                "--initialize-insecure",
+                &format!("--datadir={}", data_dir.display()),
+            ])
             .output()
             .map_err(|e| format!("mysqld init failed: {}", e))?;
         if !status.status.success() {
-            return Err(format!("mysqld init: {}", String::from_utf8_lossy(&status.stderr)));
+            return Err(format!(
+                "mysqld init: {}",
+                String::from_utf8_lossy(&status.stderr)
+            ));
         }
         Ok(())
     }
 
-    pub fn start_service(install_path: &Path, data_dir: &Path, port: u16, socket: &Path) -> Result<RunningService, String> {
+    pub fn start_service(
+        install_path: &Path,
+        data_dir: &Path,
+        port: u16,
+        socket: &Path,
+    ) -> Result<RunningService, String> {
         let mysqld = find_mysqld(install_path)?;
         let log_file = data_dir.join("mysql.log");
         let pid_file = data_dir.join("mysql.pid");
@@ -116,8 +139,11 @@ impl MySqlProvider {
         std::os::unix::fs::symlink(socket, tmp_sock).ok();
 
         Ok(RunningService {
-            module_name: "mysql".into(), version: String::new(),
-            pid: child.id(), port, started_at: Utc::now(),
+            module_name: "mysql".into(),
+            version: String::new(),
+            pid: child.id(),
+            port,
+            started_at: Utc::now(),
         })
     }
 
@@ -150,7 +176,9 @@ impl MySqlProvider {
 
     pub fn read_logs(data_dir: &Path, lines: usize) -> Result<Vec<String>, String> {
         let log_file = data_dir.join("mysql.log");
-        if !log_file.exists() { return Ok(vec!["(no log file)".into()]); }
+        if !log_file.exists() {
+            return Ok(vec!["(no log file)".into()]);
+        }
         let content = std::fs::read_to_string(&log_file).map_err(|e| format!("read: {}", e))?;
         let all: Vec<&str> = content.lines().collect();
         let start = all.len().saturating_sub(lines);
@@ -159,10 +187,15 @@ impl MySqlProvider {
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
-    let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+    let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+        "/opt/homebrew/bin/brew"
+    } else {
+        "brew"
+    };
     let mut cmd = Command::new(brew_path);
     crate::config::apply_proxy(&mut cmd);
-    let output = cmd.args(["info", "--json=v2", formula])
+    let output = cmd
+        .args(["info", "--json=v2", formula])
         .output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
@@ -176,7 +209,9 @@ fn get_brew_version(formula: &str) -> Result<String, String> {
 fn find_mysqld(install_path: &Path) -> Result<std::path::PathBuf, String> {
     for subdir in &["bin", "sbin", "libexec"] {
         let path = install_path.join(subdir).join("mysqld");
-        if path.exists() { return Ok(path); }
+        if path.exists() {
+            return Ok(path);
+        }
     }
     Err(format!("mysqld not found in {}", install_path.display()))
 }

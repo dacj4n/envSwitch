@@ -10,10 +10,15 @@ pub struct PostgresqlProvider;
 
 impl PostgresqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+            "/opt/homebrew/bin/brew"
+        } else {
+            "brew"
+        };
         let mut cmd = Command::new(brew_path);
         crate::config::apply_proxy(&mut cmd);
-        let output = cmd.args(["search", "postgresql"])
+        let output = cmd
+            .args(["search", "postgresql"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
 
@@ -36,7 +41,8 @@ impl PostgresqlProvider {
             }
         }
 
-        let mut sorted: Vec<RemoteVersion> = versions.into_iter()
+        let mut sorted: Vec<RemoteVersion> = versions
+            .into_iter()
             .map(|v| RemoteVersion { version: v })
             .collect();
         sorted.sort_by(|a, b| b.version.cmp(&a.version));
@@ -47,15 +53,16 @@ impl PostgresqlProvider {
         Ok(sorted)
     }
 
+    #[allow(dead_code)]
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
         Self::install_log(version, dest, None)
     }
-    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
-        let formula = if version.contains('.') {
-            format!("postgresql@{}", version)
-        } else {
-            format!("postgresql@{}", version)
-        };
+    pub fn install_log(
+        version: &str,
+        dest: &std::path::Path,
+        log_tx: Option<&std::sync::mpsc::Sender<String>>,
+    ) -> Result<String, String> {
+        let formula = format!("postgresql@{}", version);
 
         crate::providers::homebrew::brew_ensure_log(&formula, log_tx)?;
         let actual = crate::providers::homebrew::brew_version(&formula)?;
@@ -73,27 +80,41 @@ impl PostgresqlProvider {
     // ── Service Adapter ──────────────────────────────────────────────
 
     pub fn init_data_dir(_install_path: &Path, data_dir: &Path) -> Result<(), String> {
-        if data_dir.join("PG_VERSION").exists() { return Ok(()); }
+        if data_dir.join("PG_VERSION").exists() {
+            return Ok(());
+        }
         eprintln!("Initializing PostgreSQL data directory...");
         let status = Command::new("initdb")
             .args(["-D", &data_dir.to_string_lossy()])
             .output()
             .map_err(|e| format!("initdb: {}", e))?;
         if !status.status.success() {
-            return Err(format!("initdb failed: {}", String::from_utf8_lossy(&status.stderr)));
+            return Err(format!(
+                "initdb failed: {}",
+                String::from_utf8_lossy(&status.stderr)
+            ));
         }
         Ok(())
     }
 
-    pub fn start_service(install_path: &Path, data_dir: &Path, port: u16, _socket: &Path) -> Result<RunningService, String> {
+    pub fn start_service(
+        install_path: &Path,
+        data_dir: &Path,
+        port: u16,
+        _socket: &Path,
+    ) -> Result<RunningService, String> {
         let pg_ctl = find_binary(install_path, "pg_ctl")?;
         let log_file = data_dir.join("postgresql.log");
 
         let child = Command::new(&pg_ctl)
             .args([
-                "start", "-D", &data_dir.to_string_lossy(),
-                "-l", &log_file.to_string_lossy(),
-                "-o", &format!("-p {}", port),
+                "start",
+                "-D",
+                &data_dir.to_string_lossy(),
+                "-l",
+                &log_file.to_string_lossy(),
+                "-o",
+                &format!("-p {}", port),
             ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -113,16 +134,27 @@ impl PostgresqlProvider {
         };
 
         Ok(RunningService {
-            module_name: "pgsql".into(), version: String::new(),
-            pid, port, started_at: Utc::now(),
+            module_name: "pgsql".into(),
+            version: String::new(),
+            pid,
+            port,
+            started_at: Utc::now(),
         })
     }
 
     pub fn stop_service(_pid: u32) -> Result<(), String> {
         eprintln!("Stopping PostgreSQL...");
         // Try brew services first
-        for f in &["postgresql", "postgresql@12", "postgresql@13", "postgresql@14",
-                    "postgresql@15", "postgresql@16", "postgresql@17", "postgresql@18"] {
+        for f in &[
+            "postgresql",
+            "postgresql@12",
+            "postgresql@13",
+            "postgresql@14",
+            "postgresql@15",
+            "postgresql@16",
+            "postgresql@17",
+            "postgresql@18",
+        ] {
             let _ = Command::new("brew").args(["services", "stop", f]).output();
         }
         // Force kill remaining
@@ -141,7 +173,9 @@ impl PostgresqlProvider {
 
     pub fn read_logs(data_dir: &Path, lines: usize) -> Result<Vec<String>, String> {
         let log_file = data_dir.join("postgresql.log");
-        if !log_file.exists() { return Ok(vec!["(no log file)".into()]); }
+        if !log_file.exists() {
+            return Ok(vec!["(no log file)".into()]);
+        }
         let content = std::fs::read_to_string(&log_file).map_err(|e| format!("read: {}", e))?;
         let all: Vec<&str> = content.lines().collect();
         let start = all.len().saturating_sub(lines);
@@ -152,7 +186,9 @@ impl PostgresqlProvider {
 fn find_binary(install_path: &Path, name: &str) -> Result<std::path::PathBuf, String> {
     for subdir in &["bin", "sbin", "libexec"] {
         let path = install_path.join(subdir).join(name);
-        if path.exists() { return Ok(path); }
+        if path.exists() {
+            return Ok(path);
+        }
     }
     Err(format!("{} not found in {}", name, install_path.display()))
 }

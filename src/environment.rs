@@ -8,22 +8,32 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
     let module = crate::module_repo::find_module(module_name)
         .ok_or_else(|| format!("Unknown module: {}", module_name))?;
 
-    let install_path = fs::envswitch_home().join("envs").join(module_name).join(version);
+    let install_path = fs::envswitch_home()
+        .join("envs")
+        .join(module_name)
+        .join(version);
     if !install_path.exists() {
         return Err(format!("{} {} is not installed.", module_name, version));
     }
 
     let mut stack = load_stack();
-    let is_top = stack.last().map_or(false, |c| c.module_name == module_name && c.version == version);
+    let is_top = stack
+        .last()
+        .is_some_and(|c| c.module_name == module_name && c.version == version);
     if is_top {
-        eprintln!("{} {} is already the current version.", module_name, version);
+        eprintln!(
+            "{} {} is already the current version.",
+            module_name, version
+        );
         return Ok(render_env());
     }
 
     stack.retain(|c| c.module_name != module_name);
 
     let data_path = fs::envswitch_home().join("data").join(module_name);
-    let mut bin_paths: Vec<PathBuf> = module.path_entries.iter()
+    let mut bin_paths: Vec<PathBuf> = module
+        .path_entries
+        .iter()
         .map(|pe| install_path.join(pe))
         .filter(|p| p.exists())
         .collect();
@@ -31,7 +41,9 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
     if module_name == "jdk" {
         let home = crate::install::find_jdk_home(&install_path);
         let bin = home.join("bin");
-        if bin.exists() { bin_paths = vec![bin]; }
+        if bin.exists() {
+            bin_paths = vec![bin];
+        }
     }
 
     let mut env_vars = HashMap::new();
@@ -74,7 +86,8 @@ pub fn render_env() -> String {
 
 pub fn render_global_env() -> String {
     let stack = load_stack();
-    let globals: Vec<StackEntry> = stack.iter()
+    let globals: Vec<StackEntry> = stack
+        .iter()
         .filter(|e| matches!(e.scope, CoverScope::Global))
         .cloned()
         .collect();
@@ -94,7 +107,9 @@ fn render_full_env(stack: &[StackEntry]) -> String {
     let mut all_var_names: Vec<String> = Vec::new();
     for m in &all_modules {
         for (key, _) in &m.env_vars {
-            if !all_var_names.contains(key) { all_var_names.push(key.clone()); }
+            if !all_var_names.contains(key) {
+                all_var_names.push(key.clone());
+            }
         }
     }
     if !all_var_names.is_empty() {
@@ -127,7 +142,7 @@ fn update_shims(stack: &[StackEntry]) {
                         let name = file.file_name().to_string_lossy().to_string();
                         if seen.insert(name.clone()) {
                             let _ = std::fs::remove_file(shims_dir.join(&name));
-                            let _ = std::os::unix::fs::symlink(&file.path(), &shims_dir.join(&name));
+                            let _ = std::os::unix::fs::symlink(file.path(), shims_dir.join(&name));
                         }
                     }
                 }
@@ -137,36 +152,52 @@ fn update_shims(stack: &[StackEntry]) {
 }
 
 pub fn get_status() -> Vec<ActiveCover> {
-    load_stack().into_iter().map(|e| ActiveCover {
-        module_name: e.module_name, version: e.version, scope: e.scope,
-        injected_paths: e.bin_paths,
-        injected_envs: e.env_vars.keys().cloned().collect(),
-        applied_at: e.applied_at,
-    }).collect()
+    load_stack()
+        .into_iter()
+        .map(|e| ActiveCover {
+            module_name: e.module_name,
+            version: e.version,
+            scope: e.scope,
+            injected_paths: e.bin_paths,
+            injected_envs: e.env_vars.keys().cloned().collect(),
+            applied_at: e.applied_at,
+        })
+        .collect()
 }
 
 // ── Stack persistence ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct StackEntry {
-    module_name: String, version: String, scope: CoverScope,
-    bin_paths: Vec<PathBuf>, env_vars: HashMap<String, String>,
+    module_name: String,
+    version: String,
+    scope: CoverScope,
+    bin_paths: Vec<PathBuf>,
+    env_vars: HashMap<String, String>,
     applied_at: chrono::DateTime<Utc>,
 }
 
-fn stack_path() -> PathBuf { fs::envswitch_home().join("state").join("stack.json") }
+fn stack_path() -> PathBuf {
+    fs::envswitch_home().join("state").join("stack.json")
+}
 
 fn load_stack() -> Vec<StackEntry> {
     let path = stack_path();
     if path.exists() {
-        serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default()).unwrap_or_default()
-    } else { Vec::new() }
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
 }
 
 fn save_stack(stack: &[StackEntry]) {
     let path = stack_path();
     let _ = std::fs::create_dir_all(path.parent().unwrap());
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(stack).unwrap_or_default());
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string_pretty(stack).unwrap_or_default(),
+    );
 }
 
 #[cfg(test)]
@@ -270,7 +301,11 @@ mod tests {
         cover("jdk", "21", CoverScope::Session).unwrap();
         let script = uncover_all().unwrap();
         assert!(script.contains("unset"), "should unset vars: {}", script);
-        assert!(!script.contains("export JAVA_HOME"), "should not export: {}", script);
+        assert!(
+            !script.contains("export JAVA_HOME"),
+            "should not export: {}",
+            script
+        );
         teardown(&dir);
     }
 }

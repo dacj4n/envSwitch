@@ -6,10 +6,10 @@ pub fn load_config(dir: &std::path::Path) -> Result<Option<ProjectConfig>, Strin
     if !path.exists() {
         return Ok(None);
     }
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Cannot read .envswitchrc: {}", e))?;
-    let config: serde_yaml::Value = serde_yaml::from_str(&content)
-        .map_err(|e| format!("Invalid .envswitchrc YAML: {}", e))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Cannot read .envswitchrc: {}", e))?;
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&content).map_err(|e| format!("Invalid .envswitchrc YAML: {}", e))?;
     let mut dependencies = Vec::new();
     if let Some(deps) = config["dependencies"].as_sequence() {
         for dep in deps {

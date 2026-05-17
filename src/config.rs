@@ -26,12 +26,16 @@ pub fn load_config() -> EnvSwitchConfig {
     }
 }
 
+#[allow(dead_code)]
 fn save_config(config: &EnvSwitchConfig) {
     let path = config_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(config).unwrap_or_default());
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_string_pretty(config).unwrap_or_default(),
+    );
 }
 
 /// Get the configured proxy URL, if any.
@@ -40,6 +44,7 @@ pub fn get_proxy() -> Option<String> {
 }
 
 /// Set the proxy URL. Pass empty string to clear.
+#[allow(dead_code)]
 pub fn set_proxy(proxy: &str) {
     let mut config = load_config();
     if proxy.is_empty() {
@@ -54,10 +59,10 @@ pub fn set_proxy(proxy: &str) {
 pub fn apply_proxy(cmd: &mut std::process::Command) {
     if let Some(proxy) = get_proxy() {
         cmd.env("HTTP_PROXY", &proxy)
-           .env("HTTPS_PROXY", &proxy)
-           .env("http_proxy", &proxy)
-           .env("https_proxy", &proxy)
-           .env("ALL_PROXY", &proxy)
-           .env("all_proxy", &proxy);
+            .env("HTTPS_PROXY", &proxy)
+            .env("http_proxy", &proxy)
+            .env("https_proxy", &proxy)
+            .env("ALL_PROXY", &proxy)
+            .env("all_proxy", &proxy);
     }
 }

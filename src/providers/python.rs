@@ -7,10 +7,15 @@ pub struct PythonProvider;
 
 impl PythonProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() { "/opt/homebrew/bin/brew" } else { "brew" };
+        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
+            "/opt/homebrew/bin/brew"
+        } else {
+            "brew"
+        };
         let mut cmd = std::process::Command::new(brew);
         crate::config::apply_proxy(&mut cmd);
-        let output = cmd.args(["search", "python"])
+        let output = cmd
+            .args(["search", "python"])
             .output()
             .map_err(|_| "Homebrew not found".to_string())?;
 
@@ -28,7 +33,10 @@ impl PythonProvider {
         }
 
         // Also check already installed
-        if let Ok(out) = std::process::Command::new("brew").args(["list", "--formula"]).output() {
+        if let Ok(out) = std::process::Command::new("brew")
+            .args(["list", "--formula"])
+            .output()
+        {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
                 if let Some(ver) = line.trim().strip_prefix("python@3.") {
                     if ver.chars().all(|c| c.is_ascii_digit()) {
@@ -38,8 +46,10 @@ impl PythonProvider {
             }
         }
 
-        let mut sorted: Vec<RemoteVersion> = versions.into_iter()
-            .map(|v| RemoteVersion { version: v }).collect();
+        let mut sorted: Vec<RemoteVersion> = versions
+            .into_iter()
+            .map(|v| RemoteVersion { version: v })
+            .collect();
         sorted.sort_by(|a, b| b.version.cmp(&a.version));
 
         if sorted.is_empty() {
@@ -48,14 +58,21 @@ impl PythonProvider {
         Ok(sorted)
     }
 
+    #[allow(dead_code)]
     pub fn install(version: &str, dest: &std::path::Path) -> Result<String, String> {
         Self::install_log(version, dest, None)
     }
-    pub fn install_log(version: &str, dest: &std::path::Path, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<String, String> {
+    pub fn install_log(
+        version: &str,
+        dest: &std::path::Path,
+        log_tx: Option<&std::sync::mpsc::Sender<String>>,
+    ) -> Result<String, String> {
         let formula = format!("python@{}", version);
 
         let msg = format!("brew install --force {}", formula);
-        if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+        if let Some(tx) = log_tx {
+            let _ = tx.send(msg.clone());
+        }
         eprintln!("{}", msg);
         let mut cmd = std::process::Command::new("brew");
         crate::config::apply_proxy(&mut cmd);
@@ -66,16 +83,37 @@ impl PythonProvider {
             let mut child = cmd.spawn().map_err(|e| format!("brew: {}", e))?;
             let stdout = child.stdout.take().unwrap();
             let stderr = child.stderr.take().unwrap();
-            let tx1 = tx.clone(); let tx2 = tx.clone();
-            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stdout).lines().flatten() { let _ = tx1.send(l); } });
-            std::thread::spawn(move || { use std::io::BufRead; for l in std::io::BufReader::new(stderr).lines().flatten() { let _ = tx2.send(l); } });
+            let tx1 = tx.clone();
+            let tx2 = tx.clone();
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for l in std::io::BufReader::new(stdout)
+                    .lines()
+                    .map_while(Result::ok)
+                {
+                    let _ = tx1.send(l);
+                }
+            });
+            std::thread::spawn(move || {
+                use std::io::BufRead;
+                for l in std::io::BufReader::new(stderr)
+                    .lines()
+                    .map_while(Result::ok)
+                {
+                    let _ = tx2.send(l);
+                }
+            });
             let status = child.wait().map_err(|e| format!("brew wait: {}", e))?;
-            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+            if !status.success() {
+                eprintln!("brew link had conflicts (ignored)");
+            }
         } else {
             cmd.stdout(std::process::Stdio::inherit());
             cmd.stderr(std::process::Stdio::inherit());
             let status = cmd.status().map_err(|e| format!("brew: {}", e))?;
-            if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+            if !status.success() {
+                eprintln!("brew link had conflicts (ignored)");
+            }
         }
 
         // Get actual version
@@ -97,8 +135,7 @@ impl PythonProvider {
         let _ = std::fs::remove_file(&dest_bin);
 
         let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-        std::os::unix::fs::symlink(&brew_bin, &dest_bin)
-            .map_err(|e| format!("symlink: {}", e))?;
+        std::os::unix::fs::symlink(&brew_bin, &dest_bin).map_err(|e| format!("symlink: {}", e))?;
 
         // Some Homebrew Python versions only provide versioned binaries (python3.11).
         // Create unversioned symlinks so `python` and `python3` work.
@@ -119,7 +156,8 @@ impl PythonProvider {
 fn get_brew_version(formula: &str) -> Result<String, String> {
     let mut cmd = std::process::Command::new("brew");
     crate::config::apply_proxy(&mut cmd);
-    let output = cmd.args(["info", "--json=v2", formula])
+    let output = cmd
+        .args(["info", "--json=v2", formula])
         .output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))

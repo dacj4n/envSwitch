@@ -11,9 +11,11 @@ pub fn check_brew() -> Result<(), String> {
     let ok = brew_cmd()
         .arg("--version")
         .output()
-        .map_or(false, |o| o.status.success());
+        .is_ok_and(|o| o.status.success());
 
-    if ok { return Ok(()); }
+    if ok {
+        return Ok(());
+    }
 
     let msg = if cfg!(target_os = "linux") {
         "\
@@ -36,21 +38,29 @@ Homebrew is required for this module. Install from:
 }
 
 /// Run brew install only if formula is not already installed.
+#[allow(dead_code)]
 pub fn brew_ensure(formula: &str) -> Result<(), String> {
     brew_ensure_log(formula, None)
 }
 
 /// brew install with optional log streaming (pipes stdout/stderr to log_tx).
-pub fn brew_ensure_log(formula: &str, log_tx: Option<&std::sync::mpsc::Sender<String>>) -> Result<(), String> {
+pub fn brew_ensure_log(
+    formula: &str,
+    log_tx: Option<&std::sync::mpsc::Sender<String>>,
+) -> Result<(), String> {
     check_brew()?;
     if brew_installed(formula) {
         let msg = format!("{} already installed, linking...", formula);
-        if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+        if let Some(tx) = log_tx {
+            let _ = tx.send(msg.clone());
+        }
         eprintln!("{}", msg);
         return Ok(());
     }
     let msg = format!("brew install {}", formula);
-    if let Some(tx) = log_tx { let _ = tx.send(msg.clone()); }
+    if let Some(tx) = log_tx {
+        let _ = tx.send(msg.clone());
+    }
     eprintln!("{}", msg);
     let mut cmd = brew_cmd();
     cmd.args(["install", formula]);
@@ -60,22 +70,37 @@ pub fn brew_ensure_log(formula: &str, log_tx: Option<&std::sync::mpsc::Sender<St
         let mut child = cmd.spawn().map_err(|e| format!("brew spawn: {}", e))?;
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
-        let tx1 = tx.clone(); let tx2 = tx.clone();
+        let tx1 = tx.clone();
+        let tx2 = tx.clone();
         std::thread::spawn(move || {
             use std::io::BufRead;
-            for line in std::io::BufReader::new(stdout).lines().flatten() { let _ = tx1.send(line); }
+            for line in std::io::BufReader::new(stdout)
+                .lines()
+                .map_while(Result::ok)
+            {
+                let _ = tx1.send(line);
+            }
         });
         std::thread::spawn(move || {
             use std::io::BufRead;
-            for line in std::io::BufReader::new(stderr).lines().flatten() { let _ = tx2.send(line); }
+            for line in std::io::BufReader::new(stderr)
+                .lines()
+                .map_while(Result::ok)
+            {
+                let _ = tx2.send(line);
+            }
         });
         let status = child.wait().map_err(|e| format!("brew wait: {}", e))?;
-        if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+        if !status.success() {
+            eprintln!("brew link had conflicts (ignored)");
+        }
     } else {
         cmd.stdout(std::process::Stdio::inherit());
         cmd.stderr(std::process::Stdio::inherit());
         let status = cmd.status().map_err(|e| format!("brew: {}", e))?;
-        if !status.success() { eprintln!("brew link had conflicts (ignored)"); }
+        if !status.success() {
+            eprintln!("brew link had conflicts (ignored)");
+        }
     }
     Ok(())
 }
@@ -84,21 +109,26 @@ pub fn brew_installed(formula: &str) -> bool {
     brew_cmd()
         .args(["list", "--formula", formula])
         .output()
-        .map_or(false, |o| o.status.success())
+        .is_ok_and(|o| o.status.success())
 }
 
 pub fn brew_prefix(formula: &str) -> Result<String, String> {
-    let output = brew_cmd().args(["--prefix", formula]).output()
+    let output = brew_cmd()
+        .args(["--prefix", formula])
+        .output()
         .map_err(|e| format!("brew --prefix: {}", e))?;
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 pub fn brew_version(formula: &str) -> Result<String, String> {
-    let output = brew_cmd().args(["info", "--json=v2", formula]).output()
+    let output = brew_cmd()
+        .args(["info", "--json=v2", formula])
+        .output()
         .map_err(|e| format!("brew info: {}", e))?;
     let json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
         .map_err(|_| "brew info parse error".to_string())?;
-    json["formulae"][0]["versions"]["stable"].as_str()
+    json["formulae"][0]["versions"]["stable"]
+        .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "version not found".to_string())
 }
@@ -109,8 +139,7 @@ pub fn brew_symlink_dir(brew_path: &str, dest: &std::path::Path, dir: &str) -> R
         let dst = dest.join(dir);
         let _ = std::fs::remove_dir_all(&dst);
         let _ = std::fs::remove_file(&dst);
-        std::os::unix::fs::symlink(&src, &dst)
-            .map_err(|e| format!("symlink {}: {}", dir, e))?;
+        std::os::unix::fs::symlink(&src, &dst).map_err(|e| format!("symlink {}: {}", dir, e))?;
     }
     Ok(())
 }
