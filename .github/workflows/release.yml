@@ -22,10 +22,6 @@ jobs:
             os: macos-latest
             name: macos-arm64
 
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
-            name: linux-x64
-
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -48,12 +44,7 @@ jobs:
           tarball="envswitch-${{ matrix.name }}.tar.gz"
 
           tar czf "$tarball" -C "$(dirname "$binary")" "$(basename "$binary")"
-
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            shasum -a 256 "$tarball" > "envswitch-${{ matrix.name }}.sha256"
-          else
-            sha256sum "$tarball" > "envswitch-${{ matrix.name }}.sha256"
-          fi
+          shasum -a 256 "$tarball" > "envswitch-${{ matrix.name }}.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,7 +55,7 @@ jobs:
 
   publish:
     needs: build
-    runs-on: ubuntu-22.04
+    runs-on: macos-latest
     permissions:
       contents: write
 

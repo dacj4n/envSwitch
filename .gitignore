@@ -18,6 +18,12 @@ Thumbs.db
 # envSwitch runtime (user's local env)
 .envswitch/
 
+# Release artifacts
+release/
+
+# Homebrew tap (separate repo, managed independently)
+homebrew-envswitch/
+
 # docs
 docs/
 

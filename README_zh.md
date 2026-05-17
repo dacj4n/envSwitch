@@ -4,7 +4,7 @@
 
 **原生开发环境版本管理器**。一键切换 Java、Go、Node、PHP、Python、MySQL、PostgreSQL 版本 — 无需容器，无需 Shell Hack，无性能损耗。
 
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](https://github.com/dacj4n/envswitch)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/dacj4n/envswitch)
 [![Rust](https://img.shields.io/badge/rust-1.95+-orange)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -29,28 +29,27 @@ $ java -version                     # OpenJDK 21 ✓
 
 ## 安装
 
-### Homebrew
+### macOS — Homebrew
 
 ```bash
 brew tap dacj4n/envswitch
 brew install envswitch
 
-# 一次性 Shell 配置（自动写入 ~/.zshrc）
-envswitch init zsh
-source ~/.zshrc
+# 一次性 Shell 配置
+envswitch init zsh && source ~/.zshrc
 ```
 
-### 源码编译
+### macOS — 源码编译
 
 ```bash
 git clone https://github.com/dacj4n/envswitch.git
 cd envswitch
-cargo build --release -p envswitch --bin envswitch
+cargo build --release -p envswitch
 sudo cp target/release/envswitch /usr/local/bin/
 envswitch init zsh && source ~/.zshrc
 ```
 
-### GUI
+### macOS — GUI
 
 ```bash
 cd gui
@@ -59,16 +58,22 @@ npx tauri build
 open src-tauri/target/release/bundle/macos/envswitch.app
 ```
 
-**依赖**：`curl`、[Rust](https://rustup.rs)（仅源码编译需要）、[Homebrew](https://brew.sh)（php/python/mysql/pgsql 需要）、`fnm`/`nvm`（可选，用于 node 自动检测）。
-
-### Linux
-
-安装 [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux)：
+### Linux — 源码编译
 
 ```bash
+git clone https://github.com/dacj4n/envswitch.git
+cd envswitch
+cargo build --release -p envswitch
+sudo cp target/release/envswitch /usr/local/bin/
+
+# php/python/mysql/pgsql 模块需要安装 Linuxbrew：
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+envswitch init bash && source ~/.bashrc
 ```
+
+**依赖**：`curl`、[Rust](https://rustup.rs)（仅源码编译需要）、[Homebrew](https://brew.sh)（php/python/mysql/pgsql 需要）、`fnm`/`nvm`（可选，用于 node 自动检测）。
 
 ## 支持的模块
 

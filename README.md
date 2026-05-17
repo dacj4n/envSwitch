@@ -4,7 +4,7 @@
 
 **The native dev-environment version manager**. Switch Java, Go, Node, PHP, Python, MySQL, PostgreSQL versions in one keystroke — no containers, no shell hacks, no slow eval scripts.
 
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)](https://github.com/dacj4n/envswitch)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)](https://github.com/dacj4n/envswitch)
 [![Rust](https://img.shields.io/badge/rust-1.95+-orange)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -29,28 +29,27 @@ $ java -version                     # OpenJDK 21 ✓
 
 ## Install
 
-### Homebrew
+### macOS — Homebrew
 
 ```bash
 brew tap dacj4n/envswitch
 brew install envswitch
 
-# One-time shell setup (auto-writes ~/.zshrc)
-envswitch init zsh
-source ~/.zshrc
+# One-time shell setup
+envswitch init zsh && source ~/.zshrc
 ```
 
-### From source
+### macOS — From source
 
 ```bash
 git clone https://github.com/dacj4n/envswitch.git
 cd envswitch
-cargo build --release -p envswitch --bin envswitch
+cargo build --release -p envswitch
 sudo cp target/release/envswitch /usr/local/bin/
 envswitch init zsh && source ~/.zshrc
 ```
 
-### GUI
+### macOS — GUI
 
 ```bash
 cd gui
@@ -59,16 +58,22 @@ npx tauri build
 open src-tauri/target/release/bundle/macos/envswitch.app
 ```
 
-**Requirements**: `curl`, [Rust](https://rustup.rs) (from-source only), [Homebrew](https://brew.sh) (for php/python/mysql/pgsql), `fnm`/`nvm` (optional, node auto-detection).
-
-### Linux
-
-Install [Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux):
+### Linux — From source
 
 ```bash
+git clone https://github.com/dacj4n/envswitch.git
+cd envswitch
+cargo build --release -p envswitch
+sudo cp target/release/envswitch /usr/local/bin/
+
+# Install Linuxbrew for php/python/mysql/pgsql modules:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+envswitch init bash && source ~/.bashrc
 ```
+
+**Requirements**: `curl`, [Rust](https://rustup.rs) (from-source only), [Homebrew](https://brew.sh) (for php/python/mysql/pgsql), `fnm`/`nvm` (optional, node auto-detection).
 
 ## Supported Modules
 
