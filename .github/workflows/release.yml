@@ -2,7 +2,11 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,10 +21,13 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             name: macos-arm64
+
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             name: linux-x64
+
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -32,18 +39,25 @@ jobs:
         with:
           cache-targets: false
 
-      - run: cargo build --release -p envswitch --target ${{ matrix.target }}
+      # 只构建 CLI
+      - name: Build
+        run: cargo build --release -p envswitch --target ${{ matrix.target }}
 
       - name: Package
+        shell: bash
         run: |
           mkdir -p package
-          cp target/${{ matrix.target }}/release/envswitch package/envswitch
           mkdir -p release
+
+          cp target/${{ matrix.target }}/release/envswitch package/envswitch
+
           tar czf release/envswitch-${{ matrix.name }}.tar.gz -C package envswitch
 
       - name: Checksums
+        shell: bash
         run: |
           cd release
+
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             shasum -a 256 *.tar.gz > checksums.txt
           else
@@ -54,19 +68,18 @@ jobs:
         with:
           name: envswitch-${{ matrix.name }}
           path: |
-            release/envswitch-${{ matrix.name }}.tar.gz
+            release/*.tar.gz
             release/checksums.txt
 
   publish:
     needs: build
     runs-on: ubuntu-22.04
+
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: release
           merge-multiple: true
-
-      - run: ls -R release
 
       - uses: softprops/action-gh-release@v2
         with:
