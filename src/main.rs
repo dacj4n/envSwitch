@@ -93,7 +93,9 @@ fn main() {
         Commands::Logs { module, lines } => cmd_logs(&module, lines),
         Commands::Auto => cmd_auto(),
         Commands::InitProject => crate::project::init_project(&std::env::current_dir().unwrap()),
-        Commands::Init { shell } => cmd_init(&shell),
+        Commands::Init { shell } => cmd_init(shell.as_deref()),
+        Commands::Uninit { shell } => cmd_uninit(shell.as_deref()),
+        Commands::InitStatus => cmd_init_status(),
         Commands::CdHook { state } => cmd_cd_hook(&state),
         Commands::Link {
             module,
@@ -381,13 +383,34 @@ fn cmd_auto() -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_init(_shell_type: &str) -> Result<(), String> {
+fn home_dir() -> Result<std::path::PathBuf, String> {
+    std::env::var("HOME")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(dirs::home_dir)
+        .ok_or("Cannot find home dir".to_string())
+}
+
+fn rc_path(shell: &str) -> Result<std::path::PathBuf, String> {
+    let home = home_dir()?;
+    Ok(match shell {
+        "bash" => home.join(".bashrc"),
+        _ => home.join(".zshrc"),
+    })
+}
+
+fn detect_shell() -> &'static str {
+    let home = home_dir().unwrap_or_default();
+    if home.join(".bashrc").exists() {
+        return "bash";
+    }
+    "zsh"
+}
+
+fn cmd_init(shell: Option<&str>) -> Result<(), String> {
+    let shell = shell.unwrap_or_else(|| detect_shell());
     let bin_path =
         std::env::current_exe().map_err(|e| format!("Cannot determine binary path: {}", e))?;
-
-    let init_script = crate::shell::render_init(&bin_path.to_string_lossy());
-    let init_path = crate::infra::fs::envswitch_home().join("init.sh");
-    std::fs::write(&init_path, &init_script).map_err(|e| format!("Cannot write init.sh: {}", e))?;
 
     // Create shims and config directories
     let _ = std::fs::create_dir_all(crate::infra::fs::envswitch_home().join("shims"));
@@ -398,26 +421,89 @@ fn cmd_init(_shell_type: &str) -> Result<(), String> {
         let _ = std::fs::write(&cd_hook_file, "off");
     }
 
-    // Auto-write source line to ~/.zshrc (idempotent — only once)
-    let home = std::env::var("HOME")
-        .ok()
-        .map(std::path::PathBuf::from)
-        .or_else(dirs::home_dir)
-        .ok_or("Cannot find home dir")?;
-    let zshrc = home.join(".zshrc");
+    // Write init.sh for backward compatibility (standalone file)
+    let init_path = crate::infra::fs::envswitch_home().join("init.sh");
+    let init_block = crate::shell::render_init_block(&bin_path.to_string_lossy());
+    std::fs::write(&init_path, &init_block).map_err(|e| format!("Cannot write init.sh: {}", e))?;
+
+    let rc_path = rc_path(shell)?;
+    let content = std::fs::read_to_string(&rc_path).unwrap_or_default();
+
+    // Idempotent: skip if already installed
+    if crate::shell::has_init_block(&content) {
+        eprintln!(
+            "[INFO] Shell integration already exists in {}",
+            rc_path.display()
+        );
+        return Ok(());
+    }
+
+    // Clean up old-style source lines and markers
+    let clean = remove_old_init(&content, &init_path);
+
+    // Append the init block at the end
+    let new_content = format!("{}\n\n{}", clean.trim_end(), init_block);
+
+    std::fs::write(&rc_path, &new_content)
+        .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
+    eprintln!("[OK] Added shell integration to {}", rc_path.display());
+    if shell == "bash" {
+        eprintln!("Run:  source ~/.bashrc");
+    } else {
+        eprintln!("Run:  source ~/.zshrc");
+    }
+    Ok(())
+}
+
+/// Remove old-style source lines from the rc content.
+fn remove_old_init(content: &str, init_path: &std::path::Path) -> String {
     let source_line = format!("source {}", init_path.display());
-    let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
-    // Remove old envSwitch lines, then add at END (for PATH priority)
+    // Also strip any old block (just in case of partial/corrupt install)
+    let content = crate::shell::remove_init_block(content);
     let clean: String = content
         .lines()
         .filter(|l| !l.contains(&source_line) && !l.trim().eq("# envSwitch"))
         .collect::<Vec<_>>()
         .join("\n");
-    let new_content = format!("{}\n# envSwitch\n{}\n", clean.trim_end(), source_line);
-    std::fs::write(&zshrc, &new_content)
-        .map_err(|e| format!("Cannot write {}: {}", zshrc.display(), e))?;
-    eprintln!("Source line added to end of {}", zshrc.display());
-    eprintln!("Shell integration ready. Run: source ~/.zshrc");
+    clean
+}
+
+fn cmd_uninit(shell: Option<&str>) -> Result<(), String> {
+    let shell = shell.unwrap_or_else(|| detect_shell());
+    let rc_path = rc_path(shell)?;
+    let content = std::fs::read_to_string(&rc_path).unwrap_or_default();
+
+    if !crate::shell::has_init_block(&content) {
+        eprintln!("[INFO] No shell integration found in {}", rc_path.display());
+        return Ok(());
+    }
+
+    let cleaned = crate::shell::remove_init_block(&content);
+    std::fs::write(&rc_path, &cleaned)
+        .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
+    // Also clean up old source lines
+    let init_path = crate::infra::fs::envswitch_home().join("init.sh");
+    let cleaned = remove_old_init(&cleaned, &init_path);
+    std::fs::write(&rc_path, &cleaned)
+        .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
+    eprintln!("[OK] Removed shell integration from {}", rc_path.display());
+    eprintln!("Note: env files under ~/.envswitch/ are kept. Delete manually if desired.");
+    Ok(())
+}
+
+fn cmd_init_status() -> Result<(), String> {
+    println!("Shell integration:");
+    for &shell in &["zsh", "bash"] {
+        if let Ok(rc) = rc_path(shell) {
+            let content = std::fs::read_to_string(&rc).unwrap_or_default();
+            let status = if crate::shell::has_init_block(&content) {
+                "installed"
+            } else {
+                "not installed"
+            };
+            println!("  [{status}] {shell}rc ({})", rc.display());
+        }
+    }
     Ok(())
 }
 
@@ -467,8 +553,8 @@ fn cmd_doctor() -> Result<(), String> {
     if zshrc.exists() {
         let content = std::fs::read_to_string(&zshrc).unwrap_or_default();
         check!(
-            ".zshrc has source line",
-            content.contains("source") && content.contains("init.sh"),
+            ".zshrc has shell integration",
+            crate::shell::has_init_block(&content),
             "(run: envswitch init zsh)"
         );
     } else {

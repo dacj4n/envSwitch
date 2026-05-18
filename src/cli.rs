@@ -129,12 +129,20 @@ pub enum Commands {
     /// Create a .envswitchrc template in current directory
     InitProject,
 
-    /// Generate shell integration script
+    /// Generate shell integration (auto-detects shell if omitted)
     Init {
-        /// Shell type: zsh or bash
-        #[arg(default_value = "zsh")]
-        shell: String,
+        /// Shell type: zsh or bash (auto-detected if omitted)
+        shell: Option<String>,
     },
+
+    /// Remove shell integration from rc file
+    Uninit {
+        /// Shell type: zsh or bash (auto-detected if omitted)
+        shell: Option<String>,
+    },
+
+    /// Check shell integration status
+    InitStatus,
 
     /// Enable/disable auto cd-hook for .envswitchrc
     CdHook {

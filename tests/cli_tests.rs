@@ -228,8 +228,8 @@ fn test_init_command() {
     assert!(home.join(".zshrc").exists(), ".zshrc not created");
     let zshrc_content = std::fs::read_to_string(home.join(".zshrc")).unwrap();
     assert!(
-        zshrc_content.contains("source"),
-        ".zshrc should have source line"
+        zshrc_content.contains("# >>> envswitch initialize >>>"),
+        ".zshrc should have envswitch init block"
     );
     let _ = fs::remove_dir_all(&home);
 }
