@@ -175,7 +175,8 @@ fn brew_exists(formula: &str) -> bool {
 
 fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), String> {
     let mut prefix_cmd = super::homebrew::brew_cmd();
-    let output = prefix_cmd.args(["--prefix", formula])
+    let output = prefix_cmd
+        .args(["--prefix", formula])
         .output()
         .map_err(|e| format!("brew --prefix: {}", e))?;
 

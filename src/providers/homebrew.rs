@@ -4,10 +4,10 @@
 /// plus user-local Linuxbrew. Falls back to searching PATH.
 fn brew_path() -> std::path::PathBuf {
     let candidates: &[&str] = &[
-        "/opt/homebrew/bin/brew",                     // macOS Apple Silicon
-        "/usr/local/bin/brew",                        // macOS Intel
-        "/home/linuxbrew/.linuxbrew/bin/brew",        // Linuxbrew (system)
-        "/home/pi/.linuxbrew/bin/brew",               // Linuxbrew (Raspberry Pi common)
+        "/opt/homebrew/bin/brew",              // macOS Apple Silicon
+        "/usr/local/bin/brew",                 // macOS Intel
+        "/home/linuxbrew/.linuxbrew/bin/brew", // Linuxbrew (system)
+        "/home/pi/.linuxbrew/bin/brew",        // Linuxbrew (Raspberry Pi common)
     ];
     for p in candidates {
         let pb = std::path::PathBuf::from(p);
@@ -34,7 +34,11 @@ pub fn brew_cmd() -> std::process::Command {
     let mut cmd = std::process::Command::new(&path);
     // If we found brew at a known path, put its directory in PATH
     if let Some(parent) = path.parent() {
-        let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let sep = if cfg!(target_os = "windows") {
+            ";"
+        } else {
+            ":"
+        };
         let current = std::env::var("PATH").unwrap_or_default();
         cmd.env("PATH", format!("{}{}{}", parent.display(), sep, current));
     }
