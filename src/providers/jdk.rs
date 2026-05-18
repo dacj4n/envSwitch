@@ -141,8 +141,8 @@ fn fetch_azul_packages(
         Platform::WindowsX64 | Platform::WindowsAarch64 => "windows",
     };
     let arch = match platform {
-        Platform::MacAarch64 | Platform::LinuxAarch64 | Platform::WindowsAarch64 => "arm",
-        _ => "x86",
+        Platform::MacAarch64 | Platform::LinuxAarch64 | Platform::WindowsAarch64 => "arm64",
+        Platform::MacX64 | Platform::LinuxX64 | Platform::WindowsX64 => "x64",
     };
 
     let mut url = format!(
@@ -172,9 +172,13 @@ fn fetch_azul_packages(
 // ── Cache (1 hour TTL) ───────────────────────────────────────────────
 
 fn cache_path(platform: &Platform) -> std::path::PathBuf {
+    let arch = match platform {
+        Platform::MacAarch64 | Platform::LinuxAarch64 | Platform::WindowsAarch64 => "arm64",
+        Platform::MacX64 | Platform::LinuxX64 | Platform::WindowsX64 => "x64",
+    };
     crate::infra::fs::envswitch_home()
         .join("cache")
-        .join(format!("jdk_remote_{}.json", platform.go_arch()))
+        .join(format!("jdk_remote_v2_{}.json", arch))
 }
 
 fn read_remote_cache(platform: &Platform) -> Option<Vec<String>> {
