@@ -11,6 +11,7 @@ Manage multiple versions of JDK, Go, MySQL and more.
 Switch between them instantly using shell eval protocol.
 
 Examples:
+  envswitch init                    Set up shell integration (auto-detect shell)
   envswitch list                    List all supported modules
   envswitch search jdk              Show available JDK versions
   envswitch install jdk 21          Install JDK 21
@@ -18,6 +19,7 @@ Examples:
   envswitch uncover jdk             Deactivate JDK
   envswitch start mysql 8.0         Start MySQL 8.0
   envswitch stop mysql              Stop MySQL
+  envswitch uninit                  Remove shell integration
 "#)]
 pub struct Cli {
     #[command(subcommand)]

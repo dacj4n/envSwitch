@@ -169,7 +169,9 @@ envswitch auto                     # apply project env
 | `stop <mod>` | Stop a service |
 | `service-status` | Show service states |
 | `logs <mod> [--lines N]` | View service logs |
-| `init [zsh\|bash]` | Generate init.sh, auto-write ~/.zshrc |
+| `init [zsh\|bash]` | Add shell integration to rc file (auto-detect if omitted) |
+| `uninit [zsh\|bash]` | Remove shell integration from rc file |
+| `init-status` | Check which shells have envswitch integration |
 | `load-globals` | Output shell env for global covers (used by init.sh) |
 | `doctor` | Diagnose setup issues |
 | `cd-hook <on\|off>` | Toggle auto-switch on `cd` |

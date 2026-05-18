@@ -169,7 +169,9 @@ envswitch auto                     # 应用项目环境
 | `stop <模块>` | 停止服务 |
 | `service-status` | 服务状态 |
 | `logs <模块> [--lines N]` | 服务日志 |
-| `init [zsh\|bash]` | 生成 init.sh，自动写入 ~/.zshrc |
+| `init [zsh\|bash]` | 添加 Shell 集成到 rc 文件（可省略参数自动检测） |
+| `uninit [zsh\|bash]` | 从 rc 文件移除 Shell 集成 |
+| `init-status` | 查看各 Shell 的集成状态 |
 | `load-globals` | 输出全局覆盖的 Shell 环境变量（供 init.sh 调用） |
 | `doctor` | 诊断配置问题 |
 | `cd-hook <on\|off>` | cd 自动切换开关 |
