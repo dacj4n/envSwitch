@@ -1,7 +1,19 @@
 //! Shared Homebrew helpers for PHP, Python, MySQL, PostgreSQL providers.
 
+/// Locate the brew binary. On Linux, tries the Linuxbrew default path first,
+/// so that users don't need to eval `brew shellenv` in every session.
+fn brew_path() -> std::path::PathBuf {
+    if cfg!(target_os = "linux") {
+        let linuxbrew = std::path::PathBuf::from("/home/linuxbrew/.linuxbrew/bin/brew");
+        if linuxbrew.exists() {
+            return linuxbrew;
+        }
+    }
+    std::path::PathBuf::from("brew")
+}
+
 pub fn brew_cmd() -> std::process::Command {
-    let mut cmd = std::process::Command::new("brew");
+    let mut cmd = std::process::Command::new(brew_path());
     crate::config::apply_proxy(&mut cmd);
     cmd
 }
