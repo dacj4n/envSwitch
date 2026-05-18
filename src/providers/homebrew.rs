@@ -1,19 +1,43 @@
 //! Shared Homebrew helpers for PHP, Python, MySQL, PostgreSQL providers.
 
-/// Locate the brew binary. On Linux, tries the Linuxbrew default path first,
-/// so that users don't need to eval `brew shellenv` in every session.
+/// Locate the brew binary. Checks known install paths on macOS and Linux,
+/// plus user-local Linuxbrew. Falls back to searching PATH.
 fn brew_path() -> std::path::PathBuf {
-    if cfg!(target_os = "linux") {
-        let linuxbrew = std::path::PathBuf::from("/home/linuxbrew/.linuxbrew/bin/brew");
-        if linuxbrew.exists() {
-            return linuxbrew;
+    let candidates: &[&str] = &[
+        "/opt/homebrew/bin/brew",                     // macOS Apple Silicon
+        "/usr/local/bin/brew",                        // macOS Intel
+        "/home/linuxbrew/.linuxbrew/bin/brew",        // Linuxbrew (system)
+        "/home/pi/.linuxbrew/bin/brew",               // Linuxbrew (Raspberry Pi common)
+    ];
+    for p in candidates {
+        let pb = std::path::PathBuf::from(p);
+        if pb.exists() {
+            return pb;
         }
     }
+    // User-local Linuxbrew (e.g. installed without sudo)
+    if let Some(home) = dirs::home_dir() {
+        let local = home.join(".linuxbrew/bin/brew");
+        if local.exists() {
+            return local;
+        }
+    }
+    // Fall back to PATH
     std::path::PathBuf::from("brew")
 }
 
+/// Build a brew Command. If we resolved a non-PATH path, also ensure
+/// the brew bin directory is in PATH so that brew's own subprocesses
+/// (e.g. `brew install` which shells out) don't fail.
 pub fn brew_cmd() -> std::process::Command {
-    let mut cmd = std::process::Command::new(brew_path());
+    let path = brew_path();
+    let mut cmd = std::process::Command::new(&path);
+    // If we found brew at a known path, put its directory in PATH
+    if let Some(parent) = path.parent() {
+        let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let current = std::env::var("PATH").unwrap_or_default();
+        cmd.env("PATH", format!("{}{}{}", parent.display(), sep, current));
+    }
     crate::config::apply_proxy(&mut cmd);
     cmd
 }
