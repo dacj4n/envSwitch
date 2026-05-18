@@ -5,6 +5,8 @@ use crate::infra::fs;
 const MARKER_START: &str = "# >>> envswitch initialize >>>";
 const MARKER_END: &str = "# <<< envswitch initialize <<<";
 
+// Used by the GUI crate via envswitch::shell, not referenced by the CLI binary.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct InitStatus {
     pub cli_available: bool,
@@ -18,6 +20,7 @@ pub struct InitStatus {
 /// Search for the envswitch CLI binary in PATH and common locations.
 /// Equivalent to `which envswitch` — only returns a real CLI binary,
 /// never the GUI app bundle.
+#[allow(dead_code)]
 fn find_cli_path() -> Option<String> {
     // Search PATH for "envswitch"
     if let Ok(path) = std::env::var("PATH") {
@@ -45,6 +48,7 @@ fn find_cli_path() -> Option<String> {
 
 /// Check whether envswitch CLI is available and whether shell integration
 /// has been initialized. Used by the GUI to warn users before cover/uncover.
+#[allow(dead_code)]
 pub fn check_init_status() -> InitStatus {
     let cli_path = find_cli_path().unwrap_or_default();
     let cli_available = !cli_path.is_empty();
@@ -82,6 +86,7 @@ pub fn check_init_status() -> InitStatus {
     }
 }
 
+#[allow(dead_code)]
 fn rc_path(shell: &str) -> std::path::PathBuf {
     let home = dirs::home_dir().unwrap_or_default();
     match shell {
