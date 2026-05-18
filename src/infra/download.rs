@@ -187,7 +187,17 @@ fn extract_tar(
         let stripped: PathBuf = components[1..].iter().collect();
         let target = dest.join(stripped);
 
-        if entry.header().entry_type().is_dir() {
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_symlink() {
+            if let Some(parent) = target.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            // Remove existing file/symlink if present
+            let _ = fs::remove_file(&target);
+            if let Ok(Some(link_target)) = entry.link_name() {
+                let _ = std::os::unix::fs::symlink(&link_target, &target);
+            }
+        } else if entry_type.is_dir() {
             let _ = fs::create_dir_all(&target);
         } else {
             if let Some(parent) = target.parent() {
