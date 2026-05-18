@@ -10,13 +10,7 @@ pub struct MySqlProvider;
 
 impl MySqlProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
-            "/opt/homebrew/bin/brew"
-        } else {
-            "brew"
-        };
-        let mut cmd = std::process::Command::new(brew_path);
-        crate::config::apply_proxy(&mut cmd);
+        let mut cmd = super::homebrew::brew_cmd();
         let output = cmd
             .args(["search", "mysql"])
             .output()
@@ -187,13 +181,7 @@ impl MySqlProvider {
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
-    let brew_path = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
-        "/opt/homebrew/bin/brew"
-    } else {
-        "brew"
-    };
-    let mut cmd = Command::new(brew_path);
-    crate::config::apply_proxy(&mut cmd);
+    let mut cmd = super::homebrew::brew_cmd();
     let output = cmd
         .args(["info", "--json=v2", formula])
         .output()

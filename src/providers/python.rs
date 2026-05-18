@@ -7,13 +7,7 @@ pub struct PythonProvider;
 
 impl PythonProvider {
     pub fn fetch_remote_versions() -> Result<Vec<RemoteVersion>, String> {
-        let brew = if std::path::Path::new("/opt/homebrew/bin/brew").exists() {
-            "/opt/homebrew/bin/brew"
-        } else {
-            "brew"
-        };
-        let mut cmd = std::process::Command::new(brew);
-        crate::config::apply_proxy(&mut cmd);
+        let mut cmd = super::homebrew::brew_cmd();
         let output = cmd
             .args(["search", "python"])
             .output()
