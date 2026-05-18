@@ -10,7 +10,7 @@
 
 ## Description
 
-envSwitch installs and switches SDK/service versions using **filesystem symlinks via a shims directory** — add it to `$PATH` once, and every `cover` / `uncover` takes effect instantly across all terminals. No `eval`, no sub-shells, no PATH manipulation gymnastics.
+envSwitch installs and switches SDK/service versions using **filesystem symlinks via a shims directory** — add it to `$PATH` once, and every `cover` / `uncover` takes effect instantly across all terminals. A `precmd` hook auto-sources `env.sh` on each prompt for environment variables. No shell function wrapper, no `eval`, clean `which envswitch`.
 
 - **CLI**: fast Rust binary (~3 MB), familiar `envswitch <cmd>` interface
 - **GUI**: Tauri v2 + React + Tailwind CSS, one-click cover/install/service toggle
@@ -36,7 +36,7 @@ brew tap dacj4n/envswitch
 brew install envswitch
 
 # One-time shell setup
-envswitch init zsh && source ~/.zshrc
+envswitch init zsh && source ~/.envswitch/init.sh
 ```
 
 ### macOS — From source
@@ -46,7 +46,7 @@ git clone https://github.com/dacj4n/envswitch.git
 cd envswitch
 cargo build --release -p envswitch
 sudo cp target/release/envswitch /usr/local/bin/
-envswitch init zsh && source ~/.zshrc
+envswitch init zsh && source ~/.envswitch/init.sh
 ```
 
 ### macOS — GUI
@@ -180,7 +180,7 @@ envswitch auto                     # apply project env
 
 ## Architecture
 
-envSwitch uses a **shims directory** (`~/.envswitch/shims/`) — added to `PATH` once during `init`. When you `cover` a version, envSwitch creates a symlink in `shims/` pointing to the target version's binary. All terminals see the change instantly because the filesystem symlink is updated, not the shell environment.
+envSwitch uses a **shims directory** (`~/.envswitch/shims/`) — added to `PATH` once during `init`. When you `cover` a version, envSwitch creates a symlink in `shims/` pointing to the target version's binary. A `precmd` hook sources `env.sh` on every prompt for environment variables like `JAVA_HOME` and `GOROOT`. All terminals see the change instantly — no shell function, no `eval`.
 
 ```
 ~/.envswitch/
@@ -198,7 +198,7 @@ envSwitch uses a **shims directory** (`~/.envswitch/shims/`) — added to `PATH`
 │   ├── mysql/8.0.46/
 │   └── pgsql/16.14/
 ├── data/               # Per-version service data (MySQL/PG data dirs)
-├── state/              # Cover stack (stack.json)
+├── state/              # Cover stack (stack.json) + env.sh (auto-generated)
 ├── cache/              # Download & API response cache
 ├── logs/               # Global operation log (operations.log)
 ├── config/             # cd-hook state
@@ -237,7 +237,7 @@ npx tauri build   # production → .app / .dmg
 - **Services** — MySQL/PostgreSQL cards with status badge, PID, port, data dir
 - **Status** — Environment cover stack table with shim-path mapping
 - **Logs** — Global operation log with level filters (OK / INFO / WARN / ERR)
-- **Doctor** — Diagnostic checks (platform, brew, shims, modules)
+- **Doctor** — Diagnostic checks (platform, CLI, shell init, brew, shims, modules)
 - **Settings** — Language toggle, proxy config, CLI command reference
 
 ## Proxy

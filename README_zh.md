@@ -10,7 +10,7 @@
 
 ## 简介
 
-envSwitch 通过 **shims 目录 + 文件系统符号链接** 来安装和切换 SDK/服务版本。将 shims 目录一次性加入 `$PATH`，每次 `cover` / `uncover` 在所有终端即时生效。无需 `eval`，无需子 Shell，无需 PATH 拼接黑魔法。
+envSwitch 通过 **shims 目录 + 文件系统符号链接** 来安装和切换 SDK/服务版本。将 shims 目录一次性加入 `$PATH`，每次 `cover` / `uncover` 在所有终端即时生效。`precmd` hook 在每个提示符自动 source `env.sh` 刷新环境变量。无 shell function 包装，无 `eval`，`which envswitch` 干净纯粹。
 
 - **CLI**: 纯 Rust 二进制（~3 MB），`envswitch <命令>` 风格
 - **GUI**: Tauri v2 + React + Tailwind CSS，一键切换/安装/启停服务
@@ -36,7 +36,7 @@ brew tap dacj4n/envswitch
 brew install envswitch
 
 # 一次性 Shell 配置
-envswitch init zsh && source ~/.zshrc
+envswitch init zsh && source ~/.envswitch/init.sh
 ```
 
 ### macOS — 源码编译
@@ -46,7 +46,7 @@ git clone https://github.com/dacj4n/envswitch.git
 cd envswitch
 cargo build --release -p envswitch
 sudo cp target/release/envswitch /usr/local/bin/
-envswitch init zsh && source ~/.zshrc
+envswitch init zsh && source ~/.envswitch/init.sh
 ```
 
 ### macOS — GUI
@@ -180,7 +180,7 @@ envswitch auto                     # 应用项目环境
 
 ## 工作原理
 
-envSwitch 使用 **shims 目录**（`~/.envswitch/shims/`）— 在 `init` 时一次性加入 `$PATH`。执行 `cover` 时，envSwitch 在 `shims/` 中创建指向目标版本二进制的符号链接。因为是文件系统级操作，所有终端即时感知变化，无需重新加载 Shell。
+envSwitch 使用 **shims 目录**（`~/.envswitch/shims/`）— 在 `init` 时一次性加入 `$PATH`。执行 `cover` 时，envSwitch 在 `shims/` 中创建指向目标版本二进制的符号链接。`precmd` hook 在每个提示符自动 source `env.sh` 以刷新 `JAVA_HOME`、`GOROOT` 等环境变量。所有终端即时感知变化 — 无 shell function，无 `eval`。
 
 ```
 ~/.envswitch/
@@ -198,7 +198,7 @@ envSwitch 使用 **shims 目录**（`~/.envswitch/shims/`）— 在 `init` 时�
 │   ├── mysql/8.0.46/
 │   └── pgsql/16.14/
 ├── data/               # 服务数据（按版本隔离）
-├── state/              # 覆盖栈持久化（stack.json）
+├── state/              # 覆盖栈持久化（stack.json）+ env.sh（自动生成）
 ├── cache/              # 下载与 API 响应缓存
 ├── logs/               # 全局操作日志（operations.log）
 ├── config/             # cd-hook 状态
@@ -237,7 +237,7 @@ npx tauri build   # 生产构建 → .app / .dmg
 - **服务** — MySQL/PostgreSQL 卡片，含状态徽标、PID、端口、数据目录
 - **状态** — 环境覆盖栈表格，含 shim 路径映射
 - **日志** — 全局操作日志，按级别筛选（OK / INFO / WARN / ERR）
-- **诊断** — 诊断检查（平台、brew、shims、模块）
+- **诊断** — 诊断检查（平台、CLI、Shell 集成、brew、shims、模块）
 - **设置** — 语言切换、代理配置、CLI 命令参考
 
 ## 代理
