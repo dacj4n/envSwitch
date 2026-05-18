@@ -4,7 +4,7 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<String, String> {
+pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), String> {
     let module = crate::module_repo::find_module(module_name)
         .ok_or_else(|| format!("Unknown module: {}", module_name))?;
 
@@ -25,7 +25,7 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
             "{} {} is already the current version.",
             module_name, version
         );
-        return Ok(render_env());
+        return Ok(());
     }
 
     stack.retain(|c| c.module_name != module_name);
@@ -52,6 +52,7 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
         env_vars.insert(key.clone(), value);
     }
 
+    let scope_label = format!("{:?}", scope);
     let entry = StackEntry {
         module_name: module_name.to_string(),
         version: version.to_string(),
@@ -64,41 +65,39 @@ pub fn cover(module_name: &str, version: &str, scope: CoverScope) -> Result<Stri
     stack.push(entry);
     save_stack(&stack);
     update_shims(&stack);
-
-    Ok(render_full_env(&stack))
+    write_env_sh(&stack);
+    eprintln!("{} {} covered ({})", module_name, version, scope_label);
+    Ok(())
 }
 
-pub fn uncover(module_name: &str) -> Result<String, String> {
+pub fn uncover(module_name: &str) -> Result<(), String> {
     let mut stack = load_stack();
     if !stack.iter().any(|c| c.module_name == module_name) {
         eprintln!("{} is not currently covered.", module_name);
-        return Ok(String::new());
+        return Ok(());
     }
     stack.retain(|c| c.module_name != module_name);
     save_stack(&stack);
     update_shims(&stack);
-    Ok(render_full_env(&stack))
+    write_env_sh(&stack);
+    eprintln!("{} uncovered.", module_name);
+    Ok(())
 }
 
-pub fn render_env() -> String {
-    render_full_env(&load_stack())
-}
-
-pub fn render_global_env() -> String {
-    let stack = load_stack();
-    let globals: Vec<StackEntry> = stack
-        .iter()
-        .filter(|e| matches!(e.scope, CoverScope::Global))
-        .cloned()
-        .collect();
-    render_full_env(&globals)
-}
-
-pub fn uncover_all() -> Result<String, String> {
+pub fn uncover_all() -> Result<(), String> {
     let stack: Vec<StackEntry> = vec![];
     save_stack(&stack);
     update_shims(&stack);
-    Ok(render_full_env(&stack))
+    write_env_sh(&stack);
+    eprintln!("All modules uncovered.");
+    Ok(())
+}
+
+fn write_env_sh(stack: &[StackEntry]) {
+    let content = render_full_env(stack);
+    let env_sh = fs::envswitch_home().join("state").join("env.sh");
+    let _ = std::fs::create_dir_all(env_sh.parent().unwrap());
+    let _ = std::fs::write(&env_sh, content);
 }
 
 fn render_full_env(stack: &[StackEntry]) -> String {
@@ -121,6 +120,16 @@ fn render_full_env(stack: &[StackEntry]) -> String {
         }
     }
     script
+}
+
+pub fn render_global_env() -> String {
+    let stack = load_stack();
+    let globals: Vec<StackEntry> = stack
+        .iter()
+        .filter(|e| matches!(e.scope, CoverScope::Global))
+        .cloned()
+        .collect();
+    render_full_env(&globals)
 }
 
 fn update_shims(stack: &[StackEntry]) {
@@ -226,13 +235,17 @@ mod tests {
         std::env::remove_var("ENVSWITCH_HOME");
     }
 
+    fn read_env_sh(dir: &std::path::Path) -> String {
+        std::fs::read_to_string(dir.join("state").join("env.sh")).unwrap_or_default()
+    }
+
     #[test]
     fn test_cover_adds_to_stack() {
         let dir = setup_test_home();
-        let result = cover("jdk", "21", CoverScope::Session);
-        assert!(result.is_ok());
-        assert!(result.unwrap().contains("JAVA_HOME"));
+        assert!(cover("jdk", "21", CoverScope::Session).is_ok());
         assert_eq!(get_status().len(), 1);
+        let env = read_env_sh(&dir);
+        assert!(env.contains("JAVA_HOME"));
         teardown(&dir);
     }
 
@@ -289,9 +302,10 @@ mod tests {
     fn test_full_rebuild_contains_all_vars() {
         let dir = setup_test_home();
         cover("jdk", "21", CoverScope::Session).unwrap();
-        let script2 = cover("go", "1.22", CoverScope::Session).unwrap();
-        assert!(script2.contains("JAVA_HOME"));
-        assert!(script2.contains("GOROOT"));
+        cover("go", "1.22", CoverScope::Session).unwrap();
+        let env = read_env_sh(&dir);
+        assert!(env.contains("JAVA_HOME"));
+        assert!(env.contains("GOROOT"));
         teardown(&dir);
     }
 
@@ -299,12 +313,13 @@ mod tests {
     fn test_env_vars_cleared_on_uncover_all() {
         let dir = setup_test_home();
         cover("jdk", "21", CoverScope::Session).unwrap();
-        let script = uncover_all().unwrap();
-        assert!(script.contains("unset"), "should unset vars: {}", script);
+        uncover_all().unwrap();
+        let env = read_env_sh(&dir);
+        assert!(env.contains("unset"), "should unset vars: {}", env);
         assert!(
-            !script.contains("export JAVA_HOME"),
+            !env.contains("export JAVA_HOME"),
             "should not export: {}",
-            script
+            env
         );
         teardown(&dir);
     }

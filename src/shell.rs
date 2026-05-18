@@ -1,7 +1,94 @@
+use serde::Serialize;
+
 use crate::infra::fs;
 
 const MARKER_START: &str = "# >>> envswitch initialize >>>";
 const MARKER_END: &str = "# <<< envswitch initialize <<<";
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InitStatus {
+    pub cli_available: bool,
+    pub cli_path: String,
+    pub shell_initialized: bool,
+    pub init_shell: String,
+    pub home_dir_exists: bool,
+    pub shims_in_path: bool,
+}
+
+/// Search for the envswitch CLI binary in PATH and common locations.
+/// Equivalent to `which envswitch` — only returns a real CLI binary,
+/// never the GUI app bundle.
+fn find_cli_path() -> Option<String> {
+    // Search PATH for "envswitch"
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in path.split(':') {
+            let candidate = std::path::PathBuf::from(dir).join("envswitch");
+            if candidate.exists() && candidate.is_file() {
+                return Some(candidate.display().to_string());
+            }
+        }
+    }
+    // Common install locations
+    for c in &[
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".cargo/bin/envswitch"),
+        std::path::PathBuf::from("/usr/local/bin/envswitch"),
+        std::path::PathBuf::from("/opt/homebrew/bin/envswitch"),
+    ] {
+        if c.exists() && c.is_file() {
+            return Some(c.display().to_string());
+        }
+    }
+    None
+}
+
+/// Check whether envswitch CLI is available and whether shell integration
+/// has been initialized. Used by the GUI to warn users before cover/uncover.
+pub fn check_init_status() -> InitStatus {
+    let cli_path = find_cli_path().unwrap_or_default();
+    let cli_available = !cli_path.is_empty();
+
+    let home = fs::envswitch_home();
+    let home_dir_exists = home.exists();
+    let shims_in_path = std::env::var("PATH")
+        .unwrap_or_default()
+        .contains("envswitch/shims");
+
+    let mut shell_initialized = false;
+    let mut init_shell = String::from("none");
+
+    for shell in &["zsh", "bash"] {
+        let rc = rc_path(shell);
+        if let Ok(content) = std::fs::read_to_string(&rc) {
+            if has_init_block(&content) {
+                shell_initialized = true;
+                if init_shell == "none" {
+                    init_shell = shell.to_string();
+                } else {
+                    init_shell = format!("{},{}", init_shell, shell);
+                }
+            }
+        }
+    }
+
+    InitStatus {
+        cli_available,
+        cli_path,
+        shell_initialized,
+        init_shell,
+        home_dir_exists,
+        shims_in_path,
+    }
+}
+
+fn rc_path(shell: &str) -> std::path::PathBuf {
+    let home = dirs::home_dir().unwrap_or_default();
+    match shell {
+        "bash" => home.join(".bashrc"),
+        _ => home.join(".zshrc"),
+    }
+}
 
 /// Generate the shell integration block (for insertion into .zshrc / .bashrc).
 pub fn render_init_block(binary_path: &str) -> String {
@@ -19,21 +106,20 @@ if [ -z "$_ENVSWITCH_LOADED" ]; then
     _ENVSWITCH_LOADED=1
 fi
 
-# Shell function: eval only env vars for cover/uncover/auto
-envswitch() {{
-    case "$1" in
-        cover|uncover|auto)
-            eval "$("$_ENVSWITCH_BIN" "$@")"
-            ;;
-        *)
-            "$_ENVSWITCH_BIN" "$@"
-            ;;
-    esac
+# Refresh env vars from state on each prompt
+_envswitch_refresh() {{
+    local env_sh="${{_ENVSWITCH_HOME}}/state/env.sh"
+    [ -f "$env_sh" ] && source "$env_sh"
 }}
 
-# Auto-clear hash table on each prompt (shims may have changed)
-precmd() {{ hash -r 2>/dev/null; }} 2>/dev/null
-precmd_functions+=(precmd) 2>/dev/null
+if [ -n "$ZSH_VERSION" ]; then
+    precmd() {{ _envswitch_refresh; hash -r 2>/dev/null; }}
+elif [ -n "$BASH_VERSION" ]; then
+    PROMPT_COMMAND="_envswitch_refresh; ${{PROMPT_COMMAND:+$PROMPT_COMMAND;}}hash -r 2>/dev/null"
+fi
+
+# Load env on shell startup
+_envswitch_refresh
 
 # Auto cd-hook: detect .envswitchrc when changing directories
 __envswitch_cd_hook() {{
@@ -42,18 +128,12 @@ __envswitch_cd_hook() {{
         cd() {{
             builtin cd "$@" || return
             if [ -f ".envswitchrc" ]; then
-                eval "$("$_ENVSWITCH_BIN" auto 2>/dev/null)"
+                "$_ENVSWITCH_BIN" auto
             fi
         }}
     fi
 }}
 __envswitch_cd_hook
-
-# Load env vars from global covers on shell startup
-__envswitch_load_global() {{
-    eval "$("$_ENVSWITCH_BIN" load-globals 2>/dev/null)"
-}}
-__envswitch_load_global
 {marker_end}
 "##,
         marker_start = MARKER_START,

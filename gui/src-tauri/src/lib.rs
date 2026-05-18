@@ -2,6 +2,7 @@ use envswitch::domain::{
     CoverScope, InstalledMetadata, InstalledVersion as DomainInstalledVersion, ModuleCategory,
 };
 use envswitch::infra::oplog::{log_op, OpLevel};
+use envswitch::shell;
 use envswitch::{environment, install, module_repo, platform, providers, service_mgr};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -145,41 +146,60 @@ fn list_modules() -> Vec<ModuleInfo> {
 
 #[tauri::command]
 fn cover_module(module: String, version: String, global: bool) -> Result<String, String> {
+    let status = shell::check_init_status();
+    if !status.cli_available {
+        return Err("envSwitch CLI not found. Please reinstall envSwitch.".into());
+    }
+    if !status.shell_initialized {
+        return Err(format!(
+            "Shell integration not initialized. Cover will have no effect.\n\
+             Run: envswitch init {}",
+            if cfg!(target_os = "macos") { "zsh" } else { "bash" }
+        ));
+    }
     let scope = if global {
         CoverScope::Global
     } else {
         CoverScope::Session
     };
-    let result = environment::cover(&module, &version, scope);
-    match &result {
-        Ok(_) => log_op(
-            OpLevel::Ok,
-            &format!("envswitch cover {} {} — switched", module, version),
-        ),
-        Err(e) => log_op(
-            OpLevel::Error,
-            &format!("cover {} {} failed: {}", module, version, e),
-        ),
+    match environment::cover(&module, &version, scope) {
+        Ok(()) => {
+            log_op(
+                OpLevel::Ok,
+                &format!("envswitch cover {} {} — switched", module, version),
+            );
+            Ok(format!("{} {} covered", module, version))
+        }
+        Err(e) => {
+            log_op(
+                OpLevel::Error,
+                &format!("cover {} {} failed: {}", module, version, e),
+            );
+            Err(e)
+        }
     }
-    result
 }
 
 #[tauri::command]
 fn uncover_module(module: String) -> Result<String, String> {
-    let result = environment::uncover(&module);
-    if result.is_ok() {
-        log_op(OpLevel::Info, &format!("envswitch uncover {}", module));
+    match environment::uncover(&module) {
+        Ok(()) => {
+            log_op(OpLevel::Info, &format!("envswitch uncover {}", module));
+            Ok(format!("{} uncovered", module))
+        }
+        Err(e) => Err(e),
     }
-    result
 }
 
 #[tauri::command]
 fn uncover_all_modules() -> Result<String, String> {
-    let result = environment::uncover_all();
-    if result.is_ok() {
-        log_op(OpLevel::Info, "envswitch uncover --all");
+    match environment::uncover_all() {
+        Ok(()) => {
+            log_op(OpLevel::Info, "envswitch uncover --all");
+            Ok("All modules uncovered".into())
+        }
+        Err(e) => Err(e),
     }
-    result
 }
 
 #[tauri::command]
@@ -1422,6 +1442,11 @@ fn sync_local() -> Vec<SyncResult> {
     results
 }
 
+#[tauri::command]
+fn check_init_status() -> shell::InitStatus {
+    shell::check_init_status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1458,6 +1483,7 @@ pub fn run() {
             list_installed_versions,
             read_service_logs,
             get_operation_logs,
+            check_init_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

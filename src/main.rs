@@ -274,29 +274,15 @@ fn cmd_search(module_name: &str, refresh: bool) -> Result<(), String> {
 }
 
 fn cmd_cover(module_name: &str, version: &str, scope: CoverScope) -> Result<(), String> {
-    let scope_str = match &scope {
-        CoverScope::Session => "session",
-        CoverScope::Global => "global",
-    };
-
-    eprintln!("{} {} covered ({})", module_name, version, scope_str);
-    print!(
-        "{}",
-        crate::environment::cover(module_name, version, scope)?
-    );
-    Ok(())
+    crate::environment::cover(module_name, version, scope)
 }
 
 fn cmd_uncover(module_name: &str) -> Result<(), String> {
-    eprintln!("{} uncovered.", module_name);
-    print!("{}", crate::environment::uncover(module_name)?);
-    Ok(())
+    crate::environment::uncover(module_name)
 }
 
 fn cmd_uncover_all() -> Result<(), String> {
-    eprintln!("All modules uncovered.");
-    print!("{}", crate::environment::uncover_all()?);
-    Ok(())
+    crate::environment::uncover_all()
 }
 
 fn cmd_status() -> Result<(), String> {
@@ -367,9 +353,8 @@ fn cmd_auto() -> Result<(), String> {
         ".envswitchrc not found. Run 'envswitch init-project' to create one.".to_string()
     })?;
 
-    // Apply all covers to stack (suppress per-cover output by not printing)
     for (mod_name, version) in &config.dependencies {
-        let _ = crate::environment::cover(mod_name, version, CoverScope::Session);
+        crate::environment::cover(mod_name, version, CoverScope::Session)?;
     }
 
     let mod_list: Vec<String> = crate::environment::get_status()
@@ -377,9 +362,6 @@ fn cmd_auto() -> Result<(), String> {
         .map(|c| format!("{} {}", c.module_name, c.version))
         .collect();
     eprintln!("Project environment ready: {}", mod_list.join(", "));
-
-    // Output final full env rebuilt from stack
-    print!("{}", crate::environment::render_env());
     Ok(())
 }
 
@@ -447,11 +429,10 @@ fn cmd_init(shell: Option<&str>) -> Result<(), String> {
     std::fs::write(&rc_path, &new_content)
         .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
     eprintln!("[OK] Added shell integration to {}", rc_path.display());
-    if shell == "bash" {
-        eprintln!("Run:  source ~/.bashrc");
-    } else {
-        eprintln!("Run:  source ~/.zshrc");
-    }
+    eprintln!(
+        "[OK] Immediate effect: source {}",
+        init_path.display()
+    );
     Ok(())
 }
 
@@ -488,6 +469,8 @@ fn cmd_uninit(shell: Option<&str>) -> Result<(), String> {
         .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
     eprintln!("[OK] Removed shell integration from {}", rc_path.display());
     eprintln!("Note: env files under ~/.envswitch/ are kept. Delete manually if desired.");
+    eprintln!("To clean current shell session, open a new terminal or run:");
+    eprintln!("  unset -f envswitch 2>/dev/null; unset _ENVSWITCH_BIN _ENVSWITCH_HOME _ENVSWITCH_LOADED 2>/dev/null");
     Ok(())
 }
 

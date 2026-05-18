@@ -51,6 +51,10 @@ fn err(args: &[&str], home: &PathBuf) -> String {
     stderr
 }
 
+fn read_env_sh(home: &PathBuf) -> String {
+    std::fs::read_to_string(home.join("state").join("env.sh")).unwrap_or_default()
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[test]
@@ -158,16 +162,17 @@ fn test_cover_uncover_flow() {
     }
 
     // cover jdk 21
-    let out = ok(&["cover", "jdk", "21"], &home);
-    assert!(out.contains("JAVA_HOME"));
-    assert!(out.contains("jdk/21"));
+    ok(&["cover", "jdk", "21"], &home);
+    let env1 = read_env_sh(&home);
+    assert!(env1.contains("JAVA_HOME"));
+    assert!(env1.contains("jdk/21"));
 
     // cover go 1.22
-    let out2 = ok(&["cover", "go", "1.22"], &home);
-    assert!(out2.contains("GOROOT"));
-    assert!(out2.contains("go/1.22"));
-    // Should still have JAVA_HOME
-    assert!(out2.contains("JAVA_HOME"));
+    ok(&["cover", "go", "1.22"], &home);
+    let env2 = read_env_sh(&home);
+    assert!(env2.contains("GOROOT"));
+    assert!(env2.contains("go/1.22"));
+    assert!(env2.contains("JAVA_HOME"));
 
     // status
     let st = ok(&["status"], &home);
@@ -175,16 +180,16 @@ fn test_cover_uncover_flow() {
     assert!(st.contains("go"));
 
     // uncover jdk
-    let out3 = ok(&["uncover", "jdk"], &home);
-    // Should NOT contain jdk/21 anymore
-    assert!(!out3.contains("jdk/21"));
-    // Should still have go
-    assert!(out3.contains("go/1.22"));
+    ok(&["uncover", "jdk"], &home);
+    let env3 = read_env_sh(&home);
+    assert!(!env3.contains("jdk/21"));
+    assert!(env3.contains("go/1.22"));
 
     // uncover all
-    let out4 = ok(&["uncover", "--all"], &home);
-    assert!(!out4.contains("jdk/21"));
-    assert!(!out4.contains("go/1.22"));
+    ok(&["uncover", "--all"], &home);
+    let env4 = read_env_sh(&home);
+    assert!(!env4.contains("jdk/21"));
+    assert!(!env4.contains("go/1.22"));
 
     let _ = fs::remove_dir_all(&home);
 }
@@ -199,9 +204,9 @@ fn test_cover_already_covered() {
 
     ok(&["cover", "jdk", "21"], &home);
     // Second cover of same version should succeed (not error)
-    let out = ok(&["cover", "jdk", "21"], &home);
-    // Should still output valid script
-    assert!(out.contains("JAVA_HOME"));
+    ok(&["cover", "jdk", "21"], &home);
+    let env = read_env_sh(&home);
+    assert!(env.contains("JAVA_HOME"));
 
     let _ = fs::remove_dir_all(&home);
 }
@@ -271,9 +276,9 @@ fn test_cover_to_uncover_all() {
     let st = ok(&["status"], &home);
     assert!(st.contains("jdk"));
     // uncover --all
-    let out = ok(&["uncover", "--all"], &home);
-    // should clear all env vars
-    assert!(out.contains("unset"));
+    ok(&["uncover", "--all"], &home);
+    let env = read_env_sh(&home);
+    assert!(env.contains("unset"), "should unset vars: {}", env);
     // status empty
     let st2 = ok(&["status"], &home);
     assert!(st2.contains("No active covers"));
@@ -293,8 +298,9 @@ fn test_cover_switch_same_module() {
 
     ok(&["cover", "jdk", "17"], &home);
     // Switch to 21, should replace 17
-    let out = ok(&["cover", "jdk", "21"], &home);
-    assert!(out.contains("jdk/21"));
+    ok(&["cover", "jdk", "21"], &home);
+    let env = read_env_sh(&home);
+    assert!(env.contains("jdk/21"));
     let status = ok(&["status"], &home);
     // Should have only 1 jdk entry (21), not 2 — check by word, not substring
     assert!(status
