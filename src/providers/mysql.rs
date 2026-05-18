@@ -151,7 +151,8 @@ impl MySqlProvider {
 
         // Try brew services stop for any running mysql formula
         for f in &["mysql", "mysql@8.0", "mysql@8.4"] {
-            let _ = Command::new("brew").args(["services", "stop", f]).output();
+            let mut svc_cmd = super::homebrew::brew_cmd();
+            let _ = svc_cmd.args(["services", "stop", f]).output();
         }
 
         // Force kill any remaining mysqld

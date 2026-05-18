@@ -59,8 +59,7 @@ impl PhpProvider {
             let _ = tx.send(msg.clone());
         }
         eprintln!("{}", msg);
-        let mut cmd = std::process::Command::new("brew");
-        crate::config::apply_proxy(&mut cmd);
+        let mut cmd = super::homebrew::brew_cmd();
         cmd.args(["install", "--force", &formula]);
         if let Some(tx) = log_tx {
             cmd.stdout(std::process::Stdio::piped());
@@ -153,8 +152,7 @@ fn determine_formula(version: &str) -> Result<String, String> {
 }
 
 fn get_formula_version(formula: &str) -> Result<String, String> {
-    let mut cmd = std::process::Command::new("brew");
-    crate::config::apply_proxy(&mut cmd);
+    let mut cmd = super::homebrew::brew_cmd();
     let output = cmd
         .args(["info", "--json=v2", formula])
         .output()
@@ -168,7 +166,7 @@ fn get_formula_version(formula: &str) -> Result<String, String> {
 }
 
 fn brew_exists(formula: &str) -> bool {
-    std::process::Command::new("brew")
+    super::homebrew::brew_cmd()
         .args(["--prefix", formula])
         .output()
         .map(|o| o.status.success())
@@ -176,8 +174,8 @@ fn brew_exists(formula: &str) -> bool {
 }
 
 fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), String> {
-    let output = std::process::Command::new("brew")
-        .args(["--prefix", formula])
+    let mut prefix_cmd = super::homebrew::brew_cmd();
+    let output = prefix_cmd.args(["--prefix", formula])
         .output()
         .map_err(|e| format!("brew --prefix: {}", e))?;
 

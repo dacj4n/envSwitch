@@ -491,7 +491,8 @@ pub fn uninstall(module_name: &str, version: &str, purge: bool) -> Result<(), St
         "mysql" | "pgsql" | "php" | "python" | "go" | "node" | "jdk" => {
             let formula = brew_formula(module_name, version);
             eprintln!("Uninstalling {} via Homebrew...", formula);
-            let _ = std::process::Command::new("brew")
+            let mut uninstall_cmd = crate::providers::homebrew::brew_cmd();
+            let _ = uninstall_cmd
                 .args(["uninstall", "--force", "--ignore-dependencies", &formula])
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())

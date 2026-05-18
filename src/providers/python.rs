@@ -27,10 +27,8 @@ impl PythonProvider {
         }
 
         // Also check already installed
-        if let Ok(out) = std::process::Command::new("brew")
-            .args(["list", "--formula"])
-            .output()
-        {
+        let mut list_cmd = super::homebrew::brew_cmd();
+        if let Ok(out) = list_cmd.args(["list", "--formula"]).output() {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
                 if let Some(ver) = line.trim().strip_prefix("python@3.") {
                     if ver.chars().all(|c| c.is_ascii_digit()) {
@@ -68,8 +66,7 @@ impl PythonProvider {
             let _ = tx.send(msg.clone());
         }
         eprintln!("{}", msg);
-        let mut cmd = std::process::Command::new("brew");
-        crate::config::apply_proxy(&mut cmd);
+        let mut cmd = super::homebrew::brew_cmd();
         cmd.args(["install", "--force", &formula]);
         if let Some(tx) = log_tx {
             cmd.stdout(std::process::Stdio::piped());
@@ -117,7 +114,8 @@ impl PythonProvider {
         }
 
         // Symlink Homebrew's bin into envswitch
-        let output = std::process::Command::new("brew")
+        let mut prefix_cmd = super::homebrew::brew_cmd();
+        let output = prefix_cmd
             .args(["--prefix", &formula])
             .output()
             .map_err(|e| format!("brew --prefix: {}", e))?;
@@ -148,8 +146,7 @@ impl PythonProvider {
 }
 
 fn get_brew_version(formula: &str) -> Result<String, String> {
-    let mut cmd = std::process::Command::new("brew");
-    crate::config::apply_proxy(&mut cmd);
+    let mut cmd = super::homebrew::brew_cmd();
     let output = cmd
         .args(["info", "--json=v2", formula])
         .output()

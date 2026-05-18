@@ -149,7 +149,8 @@ impl PostgresqlProvider {
             "postgresql@17",
             "postgresql@18",
         ] {
-            let _ = Command::new("brew").args(["services", "stop", f]).output();
+            let mut svc_cmd = super::homebrew::brew_cmd();
+            let _ = svc_cmd.args(["services", "stop", f]).output();
         }
         // Force kill remaining
         if let Ok(output) = Command::new("pgrep").args(["-x", "postgres"]).output() {

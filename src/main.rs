@@ -477,7 +477,7 @@ fn cmd_doctor() -> Result<(), String> {
     }
 
     // brew check
-    let has_brew = std::process::Command::new("brew")
+    let has_brew = crate::providers::homebrew::brew_cmd()
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success());
