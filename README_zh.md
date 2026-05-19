@@ -8,6 +8,8 @@
 [![Rust](https://img.shields.io/badge/rust-1.95+-orange)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+![logo](./logo.png)
+
 ## 简介
 
 envSwitch 通过 **shims 目录 + 文件系统符号链接** 来安装和切换 SDK/服务版本。将 shims 目录一次性加入 `$PATH`，每次 `cover` / `uncover` 在所有终端即时生效。`precmd` hook 在每个提示符自动 source `env.sh` 刷新环境变量。无 shell function 包装，无 `eval`，`which envswitch` 干净纯粹。

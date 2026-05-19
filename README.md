@@ -8,6 +8,8 @@
 [![Rust](https://img.shields.io/badge/rust-1.95+-orange)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+![logo](./logo.png)
+
 ## Description
 
 envSwitch installs and switches SDK/service versions using **filesystem symlinks via a shims directory** — add it to `$PATH` once, and every `cover` / `uncover` takes effect instantly across all terminals. A `precmd` hook auto-sources `env.sh` on each prompt for environment variables. No shell function wrapper, no `eval`, clean `which envswitch`.
