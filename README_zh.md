@@ -130,8 +130,8 @@ envswitch uncover jdk              # 恢复系统默认
 envswitch uncover --all            # 恢复全部
 
 # ── 服务 ─────────────────────────────────
-envswitch start mysql 8.0.46
-envswitch start pgsql 16.14
+envswitch start mysql 8.0
+envswitch start pgsql 16
 envswitch stop mysql
 envswitch stop pgsql
 envswitch service-status           # 所有服务一览
@@ -189,14 +189,17 @@ envSwitch 使用 **shims 目录**（`~/.envswitch/shims/`）— 在 `init` 时�
 │   ├── go    → …/envs/go/1.26.3/bin/go
 │   └── …
 ├── envs/               # 已安装版本
-│   ├── jdk/
-│   │   ├── 21.0.11/    # ← symlink 到解压后的 JDK 目录
-│   │   └── 8.0.492/
-│   ├── go/1.26.3/
-│   ├── php/8.3.31/
-│   ├── python/3.14.0/
-│   ├── mysql/8.0.46/
-│   └── pgsql/16.14/
+│   ├── jdk/21.0.11/    # Tarball：直接解压
+│   ├── go/1.26.3/      # Tarball：直接解压
+│   ├── node/24.11.0/   # Tarball：直接解压
+│   ├── mysql/
+│   │   └── 8.0 → /opt/homebrew/opt/mysql@8.0     # Brew：symlink 到 opt
+│   ├── pgsql/
+│   │   └── 16 → /opt/homebrew/opt/postgresql@16  # Brew：symlink 到 opt
+│   ├── php/
+│   │   └── 8.3 → /opt/homebrew/opt/php@8.3       # Brew：symlink 到 opt
+│   └── python/
+│       └── 3.14 → /opt/homebrew/opt/python@3.14   # Brew：symlink 到 opt
 ├── data/               # 服务数据（按版本隔离）
 ├── state/              # 覆盖栈持久化（stack.json）+ env.sh（自动生成）
 ├── cache/              # 下载与 API 响应缓存

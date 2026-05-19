@@ -130,8 +130,8 @@ envswitch uncover jdk              # restore system default
 envswitch uncover --all            # restore all
 
 # ── Services ────────────────────────────────
-envswitch start mysql 8.0.46
-envswitch start pgsql 16.14
+envswitch start mysql 8.0
+envswitch start pgsql 16
 envswitch stop mysql
 envswitch stop pgsql
 envswitch service-status           # all services at a glance
@@ -189,14 +189,17 @@ envSwitch uses a **shims directory** (`~/.envswitch/shims/`) — added to `PATH`
 │   ├── go    → …/envs/go/1.26.3/bin/go
 │   └── …
 ├── envs/               # Installed versions
-│   ├── jdk/
-│   │   ├── 21.0.11/    # ← symlink to extracted JDK
-│   │   └── 8.0.492/
-│   ├── go/1.26.3/
-│   ├── php/8.3.31/
-│   ├── python/3.14.0/
-│   ├── mysql/8.0.46/
-│   └── pgsql/16.14/
+│   ├── jdk/21.0.11/    # Tarball: extracted directly
+│   ├── go/1.26.3/      # Tarball: extracted directly
+│   ├── node/24.11.0/   # Tarball: extracted directly
+│   ├── mysql/
+│   │   └── 8.0 → /opt/homebrew/opt/mysql@8.0     # Brew: symlink to opt
+│   ├── pgsql/
+│   │   └── 16 → /opt/homebrew/opt/postgresql@16  # Brew: symlink to opt
+│   ├── php/
+│   │   └── 8.3 → /opt/homebrew/opt/php@8.3       # Brew: symlink to opt
+│   └── python/
+│       └── 3.14 → /opt/homebrew/opt/python@3.14   # Brew: symlink to opt
 ├── data/               # Per-version service data (MySQL/PG data dirs)
 ├── state/              # Cover stack (stack.json) + env.sh (auto-generated)
 ├── cache/              # Download & API response cache
