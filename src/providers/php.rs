@@ -180,4 +180,3 @@ fn brew_exists(formula: &str) -> bool {
         .map(|o| o.status.success())
         .unwrap_or(false)
 }
-

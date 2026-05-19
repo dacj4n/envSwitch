@@ -429,10 +429,7 @@ fn cmd_init(shell: Option<&str>) -> Result<(), String> {
     std::fs::write(&rc_path, &new_content)
         .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
     eprintln!("[OK] Added shell integration to {}", rc_path.display());
-    eprintln!(
-        "[OK] Immediate effect: source {}",
-        init_path.display()
-    );
+    eprintln!("[OK] Immediate effect: source {}", init_path.display());
     Ok(())
 }
 

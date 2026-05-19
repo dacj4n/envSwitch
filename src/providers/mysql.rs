@@ -149,7 +149,7 @@ impl MySqlProvider {
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),
                 &format!("--socket={}", socket.display()),
-                &format!("--mysqlx=0"), // Disable X Plugin to avoid /tmp/mysqlx.sock
+                "--mysqlx=0", // Disable X Plugin to avoid /tmp/mysqlx.sock
                 &format!("--log-error={}", log_file.display()),
                 &format!("--pid-file={}", pid_file.display()),
                 &format!("--user={}", user),

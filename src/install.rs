@@ -237,10 +237,7 @@ fn install_to(
                 providers::postgresql::PostgresqlProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
-                &format!(
-                    "pgsql {} installed (brew: {})",
-                    version, metadata_version
-                ),
+                &format!("pgsql {} installed (brew: {})", version, metadata_version),
             );
         }
         "mysql" => {
@@ -259,14 +256,10 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            metadata_version =
-                providers::mysql::MySqlProvider::install_log(version, dest, log_tx)?;
+            metadata_version = providers::mysql::MySqlProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
-                &format!(
-                    "mysql {} installed (brew: {})",
-                    version, metadata_version
-                ),
+                &format!("mysql {} installed (brew: {})", version, metadata_version),
             );
         }
         "python" => {
@@ -289,10 +282,7 @@ fn install_to(
                 providers::python::PythonProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
-                &format!(
-                    "python {} installed (brew: {})",
-                    version, metadata_version
-                ),
+                &format!("python {} installed (brew: {})", version, metadata_version),
             );
         }
         "php" => {
@@ -311,14 +301,10 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            metadata_version =
-                providers::php::PhpProvider::install_log(version, dest, log_tx)?;
+            metadata_version = providers::php::PhpProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
-                &format!(
-                    "php {} installed (brew: {})",
-                    version, metadata_version
-                ),
+                &format!("php {} installed (brew: {})", version, metadata_version),
             );
         }
         _ => return Err(format!("No provider for module: {}", module_name)),

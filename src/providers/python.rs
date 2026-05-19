@@ -126,10 +126,7 @@ impl PythonProvider {
         // Homebrew python@X.Y is keg-only — python3 / python symlinks are
         // not created by brew link. Add them so shims resolve correctly.
         let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-        let ver_bin = format!(
-            "python3.{}",
-            version.split('.').nth(1).unwrap_or("")
-        );
+        let ver_bin = format!("python3.{}", version.split('.').nth(1).unwrap_or(""));
         if brew_bin.join(&ver_bin).exists() {
             let py3 = brew_bin.join("python3");
             if !py3.exists() {
