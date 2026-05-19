@@ -137,10 +137,26 @@ fn list_modules() -> Vec<ModuleInfo> {
                 .map(|ver| {
                     find_meta(ver).and_then(|iv| {
                         if iv.install_path.is_symlink() {
+                            // Brew module: symlink to /opt/homebrew/opt/<formula>
                             std::fs::read_link(&iv.install_path)
                                 .ok()
                                 .map(|p| p.display().to_string())
                         } else {
+                            // Non-symlinked: resolve bin/ symlinks to find real path
+                            // (system Python, fnm, nvm, etc.)
+                            let bin_dir = iv.install_path.join("bin");
+                            if let Ok(entries) = std::fs::read_dir(&bin_dir) {
+                                for e in entries.flatten() {
+                                    if e.path().is_symlink() {
+                                        if let Ok(target) = std::fs::read_link(e.path()) {
+                                            return target
+                                                .parent()
+                                                .map(|p| p.display().to_string());
+                                        }
+                                    }
+                                }
+                            }
+                            // Tarball install (jdk, go, node): show install path
                             Some(iv.install_path.display().to_string())
                         }
                     }).unwrap_or_default()
