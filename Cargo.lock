@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "envswitch"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "bzip2",
  "chrono",
