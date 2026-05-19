@@ -307,7 +307,6 @@ echo '{"proxy": "http://127.0.0.1:7897"}' > ~/.envswitch/config.json
 | **服务** | MySQL、PG | ✓ | ✗ | ✓ |
 | **体积** | ~3 MB | GB 级 | ~50 MB | ~200 MB |
 | **安装源** | API + Homebrew | Docker Hub | 脚本 | 内置 |
-| **国际化** | zh / en | — | — | — |
 | **代理** | 内置 | 配置 | 手动 | 手动 |
 
 ## 开发

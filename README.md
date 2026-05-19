@@ -307,7 +307,6 @@ The proxy is applied as `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` to every `cur
 | **Services** | MySQL, PG | Yes | No | Yes |
 | **Binary size** | ~3 MB | GBs | ~50 MB | ~200 MB |
 | **Install source** | API + Homebrew | Docker Hub | Script | Bundled |
-| **i18n** | zh / en | — | — | — |
 | **Proxy** | Built-in | Config | Manual | Manual |
 
 ## Development
