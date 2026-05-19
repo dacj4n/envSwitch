@@ -210,6 +210,46 @@ envSwitch uses a **shims directory** (`~/.envswitch/shims/`) — added to `PATH`
 └── tmp/                # Staging directory for atomic installs
 ```
 
+## Screenshots
+
+<table>
+<thead>
+<tr>
+<th width="50%" align="center">Version Management</th>
+<th width="50%" align="center">Service Management</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen1.jpeg"><img src="./screen1.jpeg" alt="Version Management" width="100%" style="max-width: 100%;"></a></td>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen2.jpeg"><img src="./screen2.jpeg" alt="Service Management" width="100%" style="max-width: 100%;"></a></td>
+</tr>
+<tr>
+<td align="center"><strong>Search, install, &amp; switch SDK versions in one click</strong></td>
+<td align="center"><strong>Start/stop MySQL &amp; PostgreSQL with health monitoring</strong></td>
+</tr>
+</tbody>
+</table>
+
+<table>
+<thead>
+<tr>
+<th width="50%" align="center">Doctor Diagnostics</th>
+<th width="50%" align="center">Operation Logs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen3.jpeg"><img src="./screen3.jpeg" alt="Doctor Diagnostics" width="100%" style="max-width: 100%;"></a></td>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen4.jpeg"><img src="./screen4.jpeg" alt="Operation Logs" width="100%" style="max-width: 100%;"></a></td>
+</tr>
+<tr>
+<td align="center"><strong>One-click health check for CLI, shell, brew, &amp; modules</strong></td>
+<td align="center"><strong>Timestamped history of every action across all modules</strong></td>
+</tr>
+</tbody>
+</table>
+
 ## GUI
 
 Built with **Tauri v2 + React 19 + TypeScript + Tailwind CSS v4**.

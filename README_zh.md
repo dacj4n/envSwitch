@@ -210,6 +210,46 @@ envSwitch 使用 **shims 目录**（`~/.envswitch/shims/`）— 在 `init` 时�
 └── tmp/                # 原子化安装暂存目录
 ```
 
+## 截图
+
+<table>
+<thead>
+<tr>
+<th width="50%" align="center">版本管理</th>
+<th width="50%" align="center">服务管理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen1.jpeg"><img src="./screen1.jpeg" alt="版本管理" width="100%" style="max-width: 100%;"></a></td>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen2.jpeg"><img src="./screen2.jpeg" alt="服务管理" width="100%" style="max-width: 100%;"></a></td>
+</tr>
+<tr>
+<td align="center"><strong>搜索、安装、切换 SDK 版本，一键完成</strong></td>
+<td align="center"><strong>启停 MySQL、PostgreSQL，实时健康监测</strong></td>
+</tr>
+</tbody>
+</table>
+
+<table>
+<thead>
+<tr>
+<th width="50%" align="center">诊断检查</th>
+<th width="50%" align="center">操作日志</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen3.jpeg"><img src="./screen3.jpeg" alt="诊断检查" width="100%" style="max-width: 100%;"></a></td>
+<td align="center"><a target="_blank" rel="noopener noreferrer" href="./screen4.jpeg"><img src="./screen4.jpeg" alt="操作日志" width="100%" style="max-width: 100%;"></a></td>
+</tr>
+<tr>
+<td align="center"><strong>一键检查 CLI、Shell、Homebrew、模块状态</strong></td>
+<td align="center"><strong>所有操作带时间戳记录，按级别筛选</strong></td>
+</tr>
+</tbody>
+</table>
+
 ## GUI
 
 基于 **Tauri v2 + React 19 + TypeScript + Tailwind CSS v4**。
