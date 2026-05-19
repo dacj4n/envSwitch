@@ -63,6 +63,12 @@ pub struct InstalledVersion {
     pub install_path: PathBuf,
     pub installed_at: DateTime<Utc>,
     pub size_bytes: u64,
+    #[serde(default = "default_source")]
+    pub source: String,
+}
+
+fn default_source() -> String {
+    "unknown".into()
 }
 
 /// Active cover record. Stores what WE injected (not a snapshot of previous state).

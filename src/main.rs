@@ -665,13 +665,14 @@ fn cmd_link(module_name: &str, version: &str, path: &str) -> Result<(), String> 
     } else {
         crate::domain::InstalledMetadata { versions: vec![] }
     };
-    meta.versions.retain(|v| v.version != version);
+    meta.versions.retain(|v| v.install_path != dest);
     meta.versions.push(crate::domain::InstalledVersion {
         module_name: module_name.to_string(),
         version: version.to_string(),
         install_path: dest.clone(),
         installed_at: chrono::Utc::now(),
         size_bytes: 0,
+        source: "custom".into(),
     });
     let _ = std::fs::create_dir_all(meta_path.parent().unwrap());
     std::fs::write(

@@ -61,6 +61,7 @@ struct ModuleInfo {
     active_version: Option<String>,
     source_paths: Vec<String>,
     is_symlinked: Vec<bool>,
+    uninstallable: Vec<bool>,
 }
 
 #[derive(Serialize)]
@@ -103,12 +104,11 @@ fn list_modules() -> Vec<ModuleInfo> {
                 }
             }
             keep.sort();
+            let find_meta = |ver: &str| versions.iter().find(|iv| &iv.version == ver);
             let is_symlinked: Vec<bool> = keep
                 .iter()
                 .map(|ver| {
-                    versions
-                        .iter()
-                        .find(|iv| &iv.version == ver)
+                    find_meta(ver)
                         .map(|iv| iv.install_path.is_symlink())
                         .unwrap_or(false)
                 })
@@ -116,19 +116,25 @@ fn list_modules() -> Vec<ModuleInfo> {
             let source_paths: Vec<String> = keep
                 .iter()
                 .map(|ver| {
-                    versions
-                        .iter()
-                        .find(|iv| &iv.version == ver)
-                        .and_then(|iv| {
-                            if iv.install_path.is_symlink() {
-                                std::fs::read_link(&iv.install_path)
-                                    .ok()
-                                    .map(|p| p.display().to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_default()
+                    find_meta(ver).and_then(|iv| {
+                        if iv.install_path.is_symlink() {
+                            std::fs::read_link(&iv.install_path)
+                                .ok()
+                                .map(|p| p.display().to_string())
+                        } else {
+                            // For non-symlinked installs, show the install path itself
+                            Some(iv.install_path.display().to_string())
+                        }
+                    }).unwrap_or_default()
+                })
+                .collect();
+            let uninstallable: Vec<bool> = keep
+                .iter()
+                .map(|ver| {
+                    match find_meta(ver).map(|iv| iv.source.as_str()) {
+                        Some("system") | Some("fnm") | Some("nvm") => false,
+                        _ => true,
+                    }
                 })
                 .collect();
             ModuleInfo {
@@ -139,6 +145,7 @@ fn list_modules() -> Vec<ModuleInfo> {
                 active_version: active,
                 source_paths,
                 is_symlinked,
+                uninstallable,
             }
         })
         .collect()
@@ -818,15 +825,17 @@ fn install_version(app: tauri::AppHandle, module: String, version: String) -> St
                                 }
                                 // Save metadata
                                 let size = envswitch::infra::fs::disk_usage(&final_dest);
+                                let dest_path = final_dest.clone();
                                 let installed = DomainInstalledVersion {
                                     module_name: m.clone(),
                                     version: v.clone(),
                                     install_path: final_dest,
                                     installed_at: chrono::Utc::now(),
                                     size_bytes: size,
+                                    source: "tarball".into(),
                                 };
                                 if let Ok(mut meta) = envswitch::infra::fs::load_installed(&m) {
-                                    meta.versions.retain(|iv| iv.version != v);
+                                    meta.versions.retain(|iv| iv.install_path != dest_path);
                                     meta.versions.push(installed);
                                     let _ = envswitch::infra::fs::save_installed(&m, &meta);
                                 }
@@ -1138,13 +1147,14 @@ fn link_module(module: String, version: String, path: String) -> Result<String, 
     } else {
         InstalledMetadata { versions: vec![] }
     };
-    meta.versions.retain(|v| v.version != version);
+    meta.versions.retain(|v| v.install_path != dest);
     meta.versions.push(DomainInstalledVersion {
         module_name: module.clone(),
         version: version.clone(),
         install_path: dest,
         installed_at: chrono::Utc::now(),
         size_bytes: 0,
+        source: "custom".into(),
     });
     let _ = std::fs::create_dir_all(meta_path.parent().unwrap());
     std::fs::write(
@@ -1244,6 +1254,7 @@ fn sync_local() -> Vec<SyncResult> {
                     path: src.display().to_string(),
                     source: src_label.into(),
                 });
+                save_sync_meta(module, version, &dest, src_label);
             }
         }
     }
@@ -1271,6 +1282,23 @@ fn sync_local() -> Vec<SyncResult> {
                     .unwrap_or_default(),
                 source: src_label.into(),
             });
+            save_sync_meta(module, version, &dest, src_label);
+        }
+    }
+
+    fn save_sync_meta(module: &str, version: &str, dest: &std::path::Path, source: &str) {
+        if let Ok(mut meta) = envswitch::infra::fs::load_installed(module) {
+            if !meta.versions.iter().any(|v| v.install_path == dest) {
+                meta.versions.push(DomainInstalledVersion {
+                    module_name: module.into(),
+                    version: version.into(),
+                    install_path: dest.to_path_buf(),
+                    installed_at: chrono::Utc::now(),
+                    size_bytes: 0,
+                    source: source.into(),
+                });
+                let _ = envswitch::infra::fs::save_installed(module, &meta);
+            }
         }
     }
 

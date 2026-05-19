@@ -116,6 +116,9 @@ fn install_to(
     };
 
     // Dispatch to the correct provider
+    let mut metadata_version = version.to_string();
+    let mut metadata_source = "tarball";
+
     match module_name {
         "jdk" => {
             log_msg(
@@ -215,6 +218,7 @@ fn install_to(
             fix_exec_permissions(dest)?;
         }
         "pgsql" => {
+            metadata_source = "brew";
             log_msg(log_tx, "PostgreSQL uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!(
@@ -229,17 +233,18 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            let actual_version =
+            metadata_version =
                 providers::postgresql::PostgresqlProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
                 &format!(
                     "pgsql {} installed (brew: {})",
-                    version, actual_version
+                    version, metadata_version
                 ),
             );
         }
         "mysql" => {
+            metadata_source = "brew";
             log_msg(log_tx, "MySQL uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!(
@@ -254,17 +259,18 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            let actual_version =
+            metadata_version =
                 providers::mysql::MySqlProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
                 &format!(
                     "mysql {} installed (brew: {})",
-                    version, actual_version
+                    version, metadata_version
                 ),
             );
         }
         "python" => {
+            metadata_source = "brew";
             log_msg(log_tx, "Python uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!(
@@ -279,17 +285,18 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            let actual_version =
+            metadata_version =
                 providers::python::PythonProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
                 &format!(
                     "python {} installed (brew: {})",
-                    version, actual_version
+                    version, metadata_version
                 ),
             );
         }
         "php" => {
+            metadata_source = "brew";
             log_msg(log_tx, "PHP uses Homebrew for installation.");
             if dest.exists() && !force {
                 return Err(format!(
@@ -304,13 +311,13 @@ fn install_to(
             if cancelled(cancel_token) {
                 return Err("Cancelled".into());
             }
-            let actual_version =
+            metadata_version =
                 providers::php::PhpProvider::install_log(version, dest, log_tx)?;
             log_msg(
                 log_tx,
                 &format!(
                     "php {} installed (brew: {})",
-                    version, actual_version
+                    version, metadata_version
                 ),
             );
         }
@@ -327,14 +334,15 @@ fn install_to(
         let size = fs::disk_usage(dest);
         let installed = InstalledVersion {
             module_name: module_name.to_string(),
-            version: version.to_string(),
+            version: metadata_version,
             install_path: dest.to_path_buf(),
             installed_at: Utc::now(),
             size_bytes: size,
+            source: metadata_source.to_string(),
         };
 
         let mut meta = fs::load_installed(module_name).map_err(|e| format!("IO error: {}", e))?;
-        meta.versions.retain(|v| v.version != version);
+        meta.versions.retain(|v| v.install_path != dest);
         meta.versions.push(installed);
         fs::save_installed(module_name, &meta).map_err(|e| format!("IO error: {}", e))?;
     }
@@ -467,20 +475,22 @@ pub fn list_installed(module_name: &str) -> Result<Vec<InstalledVersion>, String
     if let Ok(entries) = std::fs::read_dir(&envs_dir) {
         for entry in entries.flatten() {
             if entry.path().is_dir() {
-                let version = entry.file_name().to_string_lossy().to_string();
-                if version == "current" || version.starts_with('.') {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                if dir_name == "current" || dir_name.starts_with('.') {
                     continue;
                 }
-                // Find metadata or create stub
+                // Match metadata by install_path (dir may be a short key like "8.0"
+                // while metadata.version has the full brew version "8.0.46")
                 let known = meta
                     .as_ref()
-                    .and_then(|m| m.versions.iter().find(|v| v.version == version));
+                    .and_then(|m| m.versions.iter().find(|v| v.install_path == entry.path()));
                 let installed = known.cloned().unwrap_or_else(|| InstalledVersion {
                     module_name: module_name.to_string(),
-                    version,
+                    version: dir_name,
                     install_path: entry.path(),
                     installed_at: chrono::Utc::now(),
                     size_bytes: fs::disk_usage(&entry.path()),
+                    source: "unknown".into(),
                 });
                 versions.push(installed);
             }

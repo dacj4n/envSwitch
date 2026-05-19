@@ -172,7 +172,7 @@ export default function VersionsPage() {
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
-                            {m.source_paths?.[idx] ? `→ ${m.source_paths[idx]}` : `~/.envswitch/envs/${m.name}/${ver}`}
+                            {m.source_paths?.[idx] || `~/.envswitch/envs/${m.name}/${ver}`}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -185,8 +185,8 @@ export default function VersionsPage() {
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium"
                             ><PlayIcon className="w-3 h-3" /> {t('common.cover')}</button>
                           )}
-                          {/* Hide uninstall only for system paths (not Homebrew) */}
-                          {(!m.is_symlinked?.[idx] || m.source_paths?.[idx]?.startsWith('/opt/homebrew')) && (
+                          {/* Only show uninstall for modules that can be removed */}
+                          {(m.uninstallable?.[idx] !== false) && (
                             <button onClick={() => doUninstall(m.name, ver)}
                               className="flex items-center justify-center w-7 h-7 rounded-md text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive border border-transparent hover:border-destructive/30"
                             ><Trash2Icon className="w-3.5 h-3.5" /></button>
