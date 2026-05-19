@@ -63,7 +63,7 @@ impl PostgresqlProvider {
         let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
         let _ = std::fs::create_dir_all(dest);
 
-        for dir in &["bin", "lib", "share", "libexec"] {
+        for dir in &["bin", "lib", "share", "libexec", "sbin"] {
             crate::providers::homebrew::brew_symlink_dir(&brew_path, dest, dir)?;
         }
 

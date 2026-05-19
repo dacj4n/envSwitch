@@ -68,7 +68,7 @@ impl MySqlProvider {
         let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
         let _ = std::fs::create_dir_all(dest);
 
-        for dir in &["bin", "lib", "share", "libexec"] {
+        for dir in &["bin", "lib", "share", "libexec", "sbin"] {
             crate::providers::homebrew::brew_symlink_dir(&brew_path, dest, dir)?;
         }
 
@@ -112,7 +112,13 @@ impl MySqlProvider {
         let pid_file = data_dir.join("mysql.pid");
         let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
 
-        let child = Command::new(&mysqld)
+        let log_f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+            .map_err(|e| format!("Cannot open log file: {}", e))?;
+
+        let mut child = Command::new(&mysqld)
             .args([
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),
@@ -123,9 +129,29 @@ impl MySqlProvider {
                 &format!("--basedir={}", install_path.display()),
             ])
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(log_f)
             .spawn()
             .map_err(|e| format!("mysqld: {}", e))?;
+
+        // Wait and verify the process is still alive
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process exited — read last few lines of error log
+                let tail = Self::read_logs(data_dir, 20).unwrap_or_default();
+                return Err(format!(
+                    "MySQL exited immediately (status: {}).\nLast log lines:\n{}",
+                    status,
+                    tail.join("\n")
+                ));
+            }
+            Ok(None) => {
+                // Still running — good
+            }
+            Err(e) => {
+                return Err(format!("Cannot check mysqld status: {}", e));
+            }
+        }
 
         // Symlink /tmp/mysql.sock → version-specific socket (for client compatibility)
         let tmp_sock = std::path::Path::new("/tmp/mysql.sock");
