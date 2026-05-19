@@ -123,6 +123,24 @@ impl PythonProvider {
         std::os::unix::fs::symlink(&brew_path, dest)
             .map_err(|e| format!("symlink {} -> {}: {}", brew_path, dest.display(), e))?;
 
+        // Homebrew python@X.Y is keg-only — python3 / python symlinks are
+        // not created by brew link. Add them so shims resolve correctly.
+        let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
+        let ver_bin = format!(
+            "python3.{}",
+            version.split('.').nth(1).unwrap_or("")
+        );
+        if brew_bin.join(&ver_bin).exists() {
+            let py3 = brew_bin.join("python3");
+            if !py3.exists() {
+                std::os::unix::fs::symlink(&ver_bin, &py3).ok();
+            }
+            let py = brew_bin.join("python");
+            if !py.exists() {
+                std::os::unix::fs::symlink("python3", &py).ok();
+            }
+        }
+
         eprintln!("Python {} linked from {}", actual, brew_path);
         Ok(actual)
     }
