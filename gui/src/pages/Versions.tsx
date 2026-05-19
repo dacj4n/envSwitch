@@ -13,6 +13,8 @@ interface ModuleInfo {
   name: string; display_name: string; category: string;
   versions: string[]; active_version: string | null;
   source_paths: string[]; is_symlinked: boolean[];
+  uninstallable: boolean[];
+  version_labels: string[];
 }
 
 const MODULE_COLORS: Record<string, string> = {
@@ -167,6 +169,9 @@ export default function VersionsPage() {
                             <span className={`font-mono text-sm font-medium ${isActive ? 'text-success' : 'text-foreground'}`}>
                               {m.name}@{ver}
                             </span>
+                            {m.version_labels?.[idx] && (
+                              <span className="text-[11px] font-mono text-muted-foreground/60">{m.version_labels[idx]}</span>
+                            )}
                             {isActive && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/25">{t('common.active')}</span>
                             )}

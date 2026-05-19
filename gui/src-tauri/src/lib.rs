@@ -62,6 +62,7 @@ struct ModuleInfo {
     source_paths: Vec<String>,
     is_symlinked: Vec<bool>,
     uninstallable: Vec<bool>,
+    version_labels: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -95,7 +96,17 @@ fn list_modules() -> Vec<ModuleInfo> {
                 .iter()
                 .find(|c| c.module_name == m.name)
                 .map(|c| c.version.clone());
-            let mut deduped: Vec<String> = versions.iter().map(|v| v.version.clone()).collect();
+            // Use directory name as version key (for cover/uncover compatibility)
+            let mut deduped: Vec<String> = versions
+                .iter()
+                .map(|v| {
+                    v.install_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string()
+                })
+                .collect();
             deduped.sort_by(|a, b| b.len().cmp(&a.len()));
             let mut keep: Vec<String> = Vec::new();
             for v in &deduped {
@@ -104,7 +115,15 @@ fn list_modules() -> Vec<ModuleInfo> {
                 }
             }
             keep.sort();
-            let find_meta = |ver: &str| versions.iter().find(|iv| &iv.version == ver);
+            let find_meta = |dir_name: &str| {
+                versions.iter().find(|iv| {
+                    iv.install_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        == dir_name
+                })
+            };
             let is_symlinked: Vec<bool> = keep
                 .iter()
                 .map(|ver| {
@@ -122,7 +141,6 @@ fn list_modules() -> Vec<ModuleInfo> {
                                 .ok()
                                 .map(|p| p.display().to_string())
                         } else {
-                            // For non-symlinked installs, show the install path itself
                             Some(iv.install_path.display().to_string())
                         }
                     }).unwrap_or_default()
@@ -137,6 +155,15 @@ fn list_modules() -> Vec<ModuleInfo> {
                     }
                 })
                 .collect();
+            let version_labels: Vec<String> = keep
+                .iter()
+                .map(|ver| {
+                    match find_meta(ver) {
+                        Some(iv) if iv.version != *ver => iv.version.clone(),
+                        _ => String::new(),
+                    }
+                })
+                .collect();
             ModuleInfo {
                 name: m.name.clone(),
                 display_name: m.display_name.clone(),
@@ -146,6 +173,7 @@ fn list_modules() -> Vec<ModuleInfo> {
                 source_paths,
                 is_symlinked,
                 uninstallable,
+                version_labels,
             }
         })
         .collect()
