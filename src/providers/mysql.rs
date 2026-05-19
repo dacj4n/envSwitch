@@ -111,6 +111,28 @@ impl MySqlProvider {
         port: u16,
         socket: &Path,
     ) -> Result<RunningService, String> {
+        // Clean up stale socket files from previous runs
+        for sock in &["/tmp/mysql.sock", "/tmp/mysqlx.sock"] {
+            let _ = std::fs::remove_file(sock);
+        }
+        // Clean stale socket lock file
+        let lock_file = format!("{}.lock", socket.display());
+        let _ = std::fs::remove_file(&lock_file);
+        // Kill any leftover mysqld processes
+        if let Ok(output) = Command::new("pgrep").args(["-x", "mysqld"]).output() {
+            for pid_str in String::from_utf8_lossy(&output.stdout).lines() {
+                if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                    eprintln!("Killing stale mysqld (PID: {})...", pid);
+                    let _ = nix::sys::signal::kill(
+                        nix::unistd::Pid::from_raw(pid),
+                        nix::sys::signal::Signal::SIGKILL,
+                    );
+                }
+            }
+            // Wait for processes to die
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
         let mysqld = find_mysqld(install_path)?;
         let log_file = data_dir.join("mysql.log");
         let pid_file = data_dir.join("mysql.pid");
@@ -127,6 +149,7 @@ impl MySqlProvider {
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),
                 &format!("--socket={}", socket.display()),
+                &format!("--mysqlx=0"), // Disable X Plugin to avoid /tmp/mysqlx.sock
                 &format!("--log-error={}", log_file.display()),
                 &format!("--pid-file={}", pid_file.display()),
                 &format!("--user={}", user),
@@ -141,7 +164,6 @@ impl MySqlProvider {
         std::thread::sleep(std::time::Duration::from_secs(2));
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process exited — read last few lines of error log
                 let tail = Self::read_logs(data_dir, 20).unwrap_or_default();
                 return Err(format!(
                     "MySQL exited immediately (status: {}).\nLast log lines:\n{}",
@@ -149,9 +171,7 @@ impl MySqlProvider {
                     tail.join("\n")
                 ));
             }
-            Ok(None) => {
-                // Still running — good
-            }
+            Ok(None) => {}
             Err(e) => {
                 return Err(format!("Cannot check mysqld status: {}", e));
             }
