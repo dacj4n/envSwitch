@@ -66,11 +66,15 @@ impl MySqlProvider {
         crate::providers::homebrew::brew_ensure_log(&formula, log_tx)?;
         let actual = crate::providers::homebrew::brew_version(&formula)?;
         let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
-        let _ = std::fs::create_dir_all(dest);
 
-        for dir in &["bin", "lib", "share", "libexec", "sbin"] {
-            crate::providers::homebrew::brew_symlink_dir(&brew_path, dest, dir)?;
+        // Single symlink: dest → /opt/homebrew/opt/mysql@X.Y
+        if dest.exists() {
+            let _ = std::fs::remove_dir_all(dest);
+            let _ = std::fs::remove_file(dest);
         }
+        let _ = std::fs::create_dir_all(dest.parent().unwrap());
+        std::os::unix::fs::symlink(&brew_path, dest)
+            .map_err(|e| format!("symlink {} -> {}: {}", brew_path, dest.display(), e))?;
 
         eprintln!("MySQL {} linked from {}", actual, brew_path);
         Ok(actual)

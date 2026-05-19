@@ -173,6 +173,7 @@ pub fn brew_version(formula: &str) -> Result<String, String> {
         .ok_or_else(|| "version not found".to_string())
 }
 
+#[allow(dead_code)]
 pub fn brew_symlink_dir(brew_path: &str, dest: &std::path::Path, dir: &str) -> Result<(), String> {
     let src = std::path::PathBuf::from(brew_path).join(dir);
     if src.exists() {

@@ -109,7 +109,15 @@ impl PhpProvider {
             );
         }
 
-        link_brew_to_envswitch(&formula, dest)?;
+        let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
+        if dest.exists() {
+            let _ = std::fs::remove_dir_all(dest);
+            let _ = std::fs::remove_file(dest);
+        }
+        let _ = std::fs::create_dir_all(dest.parent().unwrap());
+        std::os::unix::fs::symlink(&brew_path, dest)
+            .map_err(|e| format!("symlink {} -> {}: {}", brew_path, dest.display(), e))?;
+        eprintln!("PHP linked: {} -> {}", dest.display(), brew_path);
         Ok(actual_version)
     }
 }
@@ -173,49 +181,3 @@ fn brew_exists(formula: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn link_brew_to_envswitch(formula: &str, dest: &std::path::Path) -> Result<(), String> {
-    let mut prefix_cmd = super::homebrew::brew_cmd();
-    let output = prefix_cmd
-        .args(["--prefix", formula])
-        .output()
-        .map_err(|e| format!("brew --prefix: {}", e))?;
-
-    let brew_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if brew_path.is_empty() {
-        return Err(format!(
-            "Could not find Homebrew install path for {}",
-            formula
-        ));
-    }
-
-    let _ = std::fs::create_dir_all(dest);
-    let dest_bin = dest.join("bin");
-    let _ = std::fs::remove_dir_all(&dest_bin);
-    let _ = std::fs::remove_file(&dest_bin);
-
-    let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-    if !brew_bin.exists() {
-        return Err(format!("{} installed but no bin/ directory found", formula));
-    }
-
-    std::os::unix::fs::symlink(&brew_bin, &dest_bin).map_err(|e| {
-        format!(
-            "symlink {} -> {} failed: {}",
-            brew_bin.display(),
-            dest_bin.display(),
-            e
-        )
-    })?;
-
-    // Also link sbin if it exists
-    let brew_sbin = std::path::PathBuf::from(&brew_path).join("sbin");
-    if brew_sbin.exists() {
-        let dest_sbin = dest.join("sbin");
-        let _ = std::fs::remove_dir_all(&dest_sbin);
-        let _ = std::fs::remove_file(&dest_sbin);
-        let _ = std::os::unix::fs::symlink(&brew_sbin, &dest_sbin);
-    }
-
-    eprintln!("PHP linked: {} -> {}", dest.display(), brew_path);
-    Ok(())
-}

@@ -113,32 +113,15 @@ impl PythonProvider {
             eprintln!("Note: installed {} (requested {})", actual, version);
         }
 
-        // Symlink Homebrew's bin into envswitch
-        let mut prefix_cmd = super::homebrew::brew_cmd();
-        let output = prefix_cmd
-            .args(["--prefix", &formula])
-            .output()
-            .map_err(|e| format!("brew --prefix: {}", e))?;
-
-        let brew_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let _ = std::fs::create_dir_all(dest);
-        let dest_bin = dest.join("bin");
-        let _ = std::fs::remove_dir_all(&dest_bin);
-        let _ = std::fs::remove_file(&dest_bin);
-
-        let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-        std::os::unix::fs::symlink(&brew_bin, &dest_bin).map_err(|e| format!("symlink: {}", e))?;
-
-        // Some Homebrew Python versions only provide versioned binaries (python3.11).
-        // Create unversioned symlinks so `python` and `python3` work.
-        let ver_bin = format!("python3.{}", version.split('.').nth(1).unwrap_or(""));
-        let ver_bin_path = dest_bin.join(&ver_bin);
-        if ver_bin_path.exists() && !dest_bin.join("python3").exists() {
-            std::os::unix::fs::symlink(&ver_bin, dest_bin.join("python3")).ok();
+        // Single symlink: dest → /opt/homebrew/opt/python@X.Y
+        let brew_path = crate::providers::homebrew::brew_prefix(&formula)?;
+        if dest.exists() {
+            let _ = std::fs::remove_dir_all(dest);
+            let _ = std::fs::remove_file(dest);
         }
-        if dest_bin.join("python3").exists() && !dest_bin.join("python").exists() {
-            std::os::unix::fs::symlink("python3", dest_bin.join("python")).ok();
-        }
+        let _ = std::fs::create_dir_all(dest.parent().unwrap());
+        std::os::unix::fs::symlink(&brew_path, dest)
+            .map_err(|e| format!("symlink {} -> {}: {}", brew_path, dest.display(), e))?;
 
         eprintln!("Python {} linked from {}", actual, brew_path);
         Ok(actual)
