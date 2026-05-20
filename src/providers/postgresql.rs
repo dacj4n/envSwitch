@@ -84,6 +84,7 @@ impl PostgresqlProvider {
         eprintln!("Initializing PostgreSQL data directory...");
         let initdb = find_binary(install_path, "initdb")?;
         let status = Command::new(&initdb)
+            .env("LC_ALL", "C")
             .args(["-D", &data_dir.to_string_lossy()])
             .output()
             .map_err(|e| format!("initdb: {}", e))?;
@@ -130,6 +131,7 @@ impl PostgresqlProvider {
             .map_err(|e| format!("Cannot open log file: {}", e))?;
 
         let mut child = Command::new(&pg_ctl)
+            .env("LC_ALL", "C")
             .args([
                 "start",
                 "-D",
