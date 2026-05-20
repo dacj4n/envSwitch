@@ -77,12 +77,13 @@ impl PostgresqlProvider {
 
     // ── Service Adapter ──────────────────────────────────────────────
 
-    pub fn init_data_dir(_install_path: &Path, data_dir: &Path) -> Result<(), String> {
+    pub fn init_data_dir(install_path: &Path, data_dir: &Path) -> Result<(), String> {
         if data_dir.join("PG_VERSION").exists() {
             return Ok(());
         }
         eprintln!("Initializing PostgreSQL data directory...");
-        let status = Command::new("initdb")
+        let initdb = find_binary(install_path, "initdb")?;
+        let status = Command::new(&initdb)
             .args(["-D", &data_dir.to_string_lossy()])
             .output()
             .map_err(|e| format!("initdb: {}", e))?;
