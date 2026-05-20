@@ -9,7 +9,7 @@ i18n
     resources: {
       en: {
         translation: {
-          app: { name: 'envSwitch', version: 'v0.2.0' },
+          app: { name: 'envSwitch', version: 'v0.2.1' },
           nav: { versions: 'Versions', services: 'Services', status: 'Status', logs: 'Logs', doctor: 'Doctor', settings: 'Settings' },
           common: { refresh: 'Refresh', save: 'Save', cancel: 'Cancel', cover: 'Cover', uncover: 'Uncover', start: 'Start', stop: 'Stop', install: 'Install', search: 'Search', fetch: 'Fetch', active: 'ACTIVE', noVersions: 'No versions installed', selectModule: 'Select a module', available: 'Available', startAll: 'Start All', stopAll: 'Stop All', installed: 'installed', availableCount: 'available', loading: 'Loading...', noLogs: 'No log entries — the service may not have been started yet', noVersionFound: 'No installed version found', commands: 'commands', done: 'Done' },
           service: { running: 'Running', stopped: 'Stopped', pid: 'PID', port: 'Port', dataDir: 'Data', cliRef: 'CLI Quick Reference', logViewer: 'Log Viewer', manageSubtitle: 'Manage database services', logsSubtitle: 'Real service logs from running instances' },
@@ -25,7 +25,7 @@ i18n
       },
       zh: {
         translation: {
-          app: { name: 'envSwitch', version: 'v0.2.0' },
+          app: { name: 'envSwitch', version: 'v0.2.1' },
           nav: { versions: '版本', services: '服务', status: '状态', logs: '日志', doctor: '诊断', settings: '设置' },
           common: { refresh: '刷新', save: '保存', cancel: '取消', cover: '覆盖', uncover: '取消覆盖', start: '启动', stop: '停止', install: '安装', search: '搜索', fetch: '获取', active: '已激活', noVersions: '未安装版本', selectModule: '选择一个模块', available: '可用版本', startAll: '全部启动', stopAll: '全部停止', installed: '已安装', availableCount: '可用', loading: '加载中...', noLogs: '暂无日志 — 服务可能尚未启动', noVersionFound: '未找到已安装版本', commands: '命令', done: '完成' },
           service: { running: '运行中', stopped: '已停止', pid: '进程', port: '端口', dataDir: '数据', cliRef: 'CLI 快速参考', logViewer: '日志查看器', manageSubtitle: '管理数据库服务', logsSubtitle: '运行中的服务日志' },

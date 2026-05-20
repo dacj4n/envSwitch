@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "envswitch",
-  "version": "0.2.0",
+  "productName": "envSwitch",
+  "version": "0.2.1",
   "identifier": "com.envswitch.desktop",
   "build": {
     "frontendDist": "../dist",
