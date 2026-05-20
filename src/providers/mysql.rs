@@ -89,7 +89,9 @@ impl MySqlProvider {
         }
         eprintln!("Initializing MySQL data directory...");
         let mysqld = find_mysqld(install_path)?;
-        let status = Command::new(&mysqld)
+        let mut init_cmd = Command::new(&mysqld);
+        super::homebrew::sanitize_cmd(&mut init_cmd);
+        let status = init_cmd
             .args([
                 "--initialize-insecure",
                 &format!("--datadir={}", data_dir.display()),
@@ -144,7 +146,9 @@ impl MySqlProvider {
             .open(&log_file)
             .map_err(|e| format!("Cannot open log file: {}", e))?;
 
-        let mut child = Command::new(&mysqld)
+        let mut mysqld_cmd = Command::new(&mysqld);
+        super::homebrew::sanitize_cmd(&mut mysqld_cmd);
+        let mut child = mysqld_cmd
             .args([
                 &format!("--datadir={}", data_dir.display()),
                 &format!("--port={}", port),

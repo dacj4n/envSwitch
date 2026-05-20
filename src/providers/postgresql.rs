@@ -83,8 +83,9 @@ impl PostgresqlProvider {
         }
         eprintln!("Initializing PostgreSQL data directory...");
         let initdb = find_binary(install_path, "initdb")?;
-        let status = Command::new(&initdb)
-            .env("LC_ALL", "C")
+        let mut init_cmd = Command::new(&initdb);
+        super::homebrew::sanitize_cmd(&mut init_cmd);
+        let status = init_cmd
             .args(["-D", &data_dir.to_string_lossy()])
             .output()
             .map_err(|e| format!("initdb: {}", e))?;
@@ -110,7 +111,11 @@ impl PostgresqlProvider {
         // Clean stale PID file
         if pid_file.exists() {
             if let Ok(old_pid_str) = std::fs::read_to_string(&pid_file) {
-                if let Some(old_pid) = old_pid_str.lines().next().and_then(|l| l.trim().parse::<i32>().ok()) {
+                if let Some(old_pid) = old_pid_str
+                    .lines()
+                    .next()
+                    .and_then(|l| l.trim().parse::<i32>().ok())
+                {
                     // Check if old process is still running
                     if nix::sys::signal::kill(nix::unistd::Pid::from_raw(old_pid), None).is_ok() {
                         return Err(format!(
@@ -130,8 +135,9 @@ impl PostgresqlProvider {
             .open(&log_file)
             .map_err(|e| format!("Cannot open log file: {}", e))?;
 
-        let mut child = Command::new(&pg_ctl)
-            .env("LC_ALL", "C")
+        let mut pg_cmd = Command::new(&pg_ctl);
+        super::homebrew::sanitize_cmd(&mut pg_cmd);
+        let mut child = pg_cmd
             .args([
                 "start",
                 "-D",

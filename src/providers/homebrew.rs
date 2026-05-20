@@ -184,3 +184,21 @@ pub fn brew_symlink_dir(brew_path: &str, dest: &std::path::Path, dir: &str) -> R
     }
     Ok(())
 }
+
+/// Sanitize the environment for a service subprocess.
+///
+/// GUI apps on macOS inherit a bloated, locale-missing environment from
+/// Finder/launchd. Clearing to just PATH + HOME + C locale guarantees
+/// reliable startup for PostgreSQL, MySQL, and any future service.
+pub fn sanitize_cmd(cmd: &mut std::process::Command) {
+    cmd.env_clear();
+    if let Ok(path) = std::env::var("PATH") {
+        cmd.env("PATH", path);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        cmd.env("HOME", home);
+    }
+    cmd.env("LANG", "C");
+    cmd.env("LC_ALL", "C");
+    cmd.env("LC_CTYPE", "C");
+}
