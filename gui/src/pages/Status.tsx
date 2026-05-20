@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
+import { usePageActive } from '../lib/utils';
 import { CheckCircleIcon, CircleIcon, ArrowRightIcon } from 'lucide-react';
 
 interface ActiveCover { module_name: string; version: string; scope: string; applied_at: string; }
@@ -24,6 +25,7 @@ export default function StatusPage() {
     invoke<{name:string}[]>('list_modules').then(list => setAllModules(list.map((m: any) => m.name)));
   };
   useEffect(() => { refresh(); }, []);
+  usePageActive('/status', refresh);
 
   const coveredSet = new Set(covers.map(c => c.module_name));
   const statusList: { module: string; activeVersion: string | null; scope: string; isActive: boolean }[] = covers.map(c => ({

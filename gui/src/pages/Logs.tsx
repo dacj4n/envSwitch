@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
+import { usePageActive } from '../lib/utils';
 import { ScrollTextIcon, InfoIcon, CheckCircle2Icon, AlertTriangleIcon, XCircleIcon, Loader2Icon } from 'lucide-react';
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -34,6 +35,7 @@ export default function LogsPage() {
   }, []);
 
   useEffect(() => { refresh(); }, []);
+  usePageActive('/logs', refresh);
 
   const filtered = logs.filter(l => {
     if (filter === 'ALL') return true;

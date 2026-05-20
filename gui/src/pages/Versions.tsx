@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
+import { usePageActive } from '../lib/utils';
 import {
   DownloadIcon, PlayIcon, XCircleIcon, Trash2Icon, Loader2Icon,
   ChevronDownIcon, ChevronRightIcon, CircleIcon, PackageIcon, CheckCircleIcon,
@@ -49,6 +50,7 @@ export default function VersionsPage() {
     );
   };
   useEffect(() => { refresh(); }, []);
+  usePageActive('/', refresh);
 
   const cover = async (mod: string, ver: string) => {
     try { await invoke('cover_module', { module: mod, version: ver, global: false }); toast.success(`${mod} ${ver} covered`); refresh(); }

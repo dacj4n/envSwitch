@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
+import { usePageActive } from '../lib/utils';
 import { PlayIcon, SquareIcon, ServerIcon, HardDriveIcon, NetworkIcon, CircleDotIcon, DatabaseIcon, Loader2Icon } from 'lucide-react';
 
 interface ServiceInfo { name: string; status: string; pid: number | null; port: number | null; }
@@ -49,6 +50,7 @@ export default function ServicesPage() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  usePageActive('/services', refresh);
 
   const toggle = (name: string, running: boolean) => {
     const mod = modules.find(m => m.name === name);

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
+import { usePageActive } from '../lib/utils';
 import { CheckCircle2Icon, AlertTriangleIcon, XCircleIcon, Loader2Icon, HeartPulseIcon } from 'lucide-react';
 
 interface CheckItem { label: string; status: 'ok' | 'warn' | 'error'; detail?: string; }
@@ -12,7 +13,8 @@ export default function DoctorPage() {
   const [loading, setLoading] = useState(true);
   const [platform, setPlatform] = useState('');
 
-  useEffect(() => {
+  const runChecks = useCallback(() => {
+    setLoading(true);
     Promise.all([
       invoke<string>('get_platform').catch(() => 'unknown'),
       invoke<any[]>('list_modules').catch(() => []),
@@ -30,7 +32,10 @@ export default function DoctorPage() {
       setChecks(items);
       setLoading(false);
     });
-  }, []);
+  }, [t]);
+
+  useEffect(() => { runChecks(); }, []);
+  usePageActive('/doctor', runChecks);
 
   const okCount = checks.filter(c => c.status === 'ok').length;
   const warnCount = checks.filter(c => c.status === 'warn').length;

@@ -104,8 +104,32 @@ impl PostgresqlProvider {
     ) -> Result<RunningService, String> {
         let pg_ctl = find_binary(install_path, "pg_ctl")?;
         let log_file = data_dir.join("postgresql.log");
+        let pid_file = data_dir.join("postmaster.pid");
 
-        let child = Command::new(&pg_ctl)
+        // Clean stale PID file
+        if pid_file.exists() {
+            if let Ok(old_pid_str) = std::fs::read_to_string(&pid_file) {
+                if let Some(old_pid) = old_pid_str.lines().next().and_then(|l| l.trim().parse::<i32>().ok()) {
+                    // Check if old process is still running
+                    if nix::sys::signal::kill(nix::unistd::Pid::from_raw(old_pid), None).is_ok() {
+                        return Err(format!(
+                            "PostgreSQL is already running (PID: {}). Stop it first with: envswitch stop pgsql",
+                            old_pid
+                        ));
+                    }
+                }
+            }
+            // Stale — remove it
+            let _ = std::fs::remove_file(&pid_file);
+        }
+
+        let log_f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_file)
+            .map_err(|e| format!("Cannot open log file: {}", e))?;
+
+        let mut child = Command::new(&pg_ctl)
             .args([
                 "start",
                 "-D",
@@ -115,22 +139,47 @@ impl PostgresqlProvider {
                 "-o",
                 &format!("-p {}", port),
             ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stdout(log_f.try_clone().unwrap())
+            .stderr(log_f)
             .spawn()
             .map_err(|e| format!("pg_ctl: {}", e))?;
 
-        // pg_ctl start returns immediately, get the actual postgres PID
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        let pid_file = data_dir.join("postmaster.pid");
+        // pg_ctl start backgrounds postgres, then exits. Wait for both.
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        match child.try_wait() {
+            Ok(Some(status)) if !status.success() => {
+                let tail = Self::read_logs(data_dir, 20).unwrap_or_default();
+                return Err(format!(
+                    "pg_ctl exited with status {}. Last log lines:\n{}",
+                    status,
+                    tail.join("\n")
+                ));
+            }
+            Ok(None) => {
+                // pg_ctl still running (should not happen normally)
+            }
+            _ => {}
+        }
+
+        // Read the real postgres PID from postmaster.pid
         let pid = if pid_file.exists() {
             std::fs::read_to_string(&pid_file)
                 .ok()
-                .and_then(|s| s.lines().next()?.trim().parse().ok())
+                .and_then(|s| s.lines().next()?.trim().parse::<u32>().ok())
                 .unwrap_or(child.id())
         } else {
-            child.id()
+            return Err("PostgreSQL did not start — no postmaster.pid found. Check logs.".into());
         };
+
+        // Verify the PID is actually running
+        if nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None).is_err() {
+            let tail = Self::read_logs(data_dir, 20).unwrap_or_default();
+            return Err(format!(
+                "PostgreSQL PID {} not alive after start. Log:\n{}",
+                pid,
+                tail.join("\n")
+            ));
+        }
 
         Ok(RunningService {
             module_name: "pgsql".into(),
