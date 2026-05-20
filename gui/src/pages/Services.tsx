@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
@@ -16,7 +16,7 @@ export default function ServicesPage() {
   const { t } = useTranslation();
   const [services, setServices] = useState<ServiceInfo[]>([]);
   const [modules, setModules] = useState<ModuleInfo[]>([]);
-  const [toggling, setToggling] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<Set<string>>(new Set());
 
   const STATUS_CONFIG: Record<string, { dot: string; text: string; badge: string }> = {
     Running: { dot: 'bg-success animate-pulse-slow', text: 'text-success', badge: 'bg-success/10 border-success/30' },
@@ -28,33 +28,43 @@ export default function ServicesPage() {
     const unlisten = listen<{id: string; kind: string; module: string; status: string; message: string}>('job-update', (ev) => {
       const j = ev.payload;
       if (j.kind === 'start' || j.kind === 'stop') {
-        if (j.status === 'success') {
-          toast.success(j.message);
+        if (j.status === 'success' || j.status === 'failed') {
+          if (j.status === 'success') toast.success(j.message);
+          else toast.error(j.message);
           refresh();
-          setToggling(null);
-        } else if (j.status === 'failed') {
-          toast.error(j.message);
-          setToggling(null);
+          setToggling(prev => {
+            const next = new Set(prev);
+            next.delete(j.module);
+            return next;
+          });
         }
       }
     });
     return () => { unlisten.then(f => f()); };
   }, []);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     invoke<ServiceInfo[]>('get_services').then(setServices);
     invoke<ModuleInfo[]>('list_modules').then(setModules);
-  };
-  useEffect(() => { refresh(); }, []);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const toggle = (name: string, running: boolean) => {
     const mod = modules.find(m => m.name === name);
     const ver = mod?.active_version || mod?.versions[0];
-    setToggling(name);
+    setToggling(prev => new Set(prev).add(name));
     const cmd = running
       ? invoke('stop_service', { module: name })
       : invoke('start_service', { module: name, version: ver });
-    cmd.catch(e => { toast.error(`${e}`); setToggling(null); });
+    cmd.catch(e => {
+      toast.error(`${e}`);
+      setToggling(prev => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
+    });
   };
 
   const runningCount = services.filter(s => s.status === 'Running').length;
@@ -150,12 +160,12 @@ export default function ServicesPage() {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 px-5 pb-4">
-                  <button onClick={() => toggle(svc.name, false)} disabled={running || toggling === svc.name}
+                  <button onClick={() => toggle(svc.name, false)} disabled={running || toggling.has(svc.name)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30 font-medium disabled:opacity-40"
-                  >{toggling === svc.name && !running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlayIcon className="w-3.5 h-3.5" />} {t('common.start')}</button>
-                  <button onClick={() => toggle(svc.name, true)} disabled={!running || toggling === svc.name}
+                  >{toggling.has(svc.name) && !running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <PlayIcon className="w-3.5 h-3.5" />} {t('common.start')}</button>
+                  <button onClick={() => toggle(svc.name, true)} disabled={!running || toggling.has(svc.name)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-md text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/30 font-medium disabled:opacity-40"
-                  >{toggling === svc.name && running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <SquareIcon className="w-3.5 h-3.5" />} {t('common.stop')}</button>
+                  >{toggling.has(svc.name) && running ? <Loader2Icon className="w-3.5 h-3.5 animate-spin" /> : <SquareIcon className="w-3.5 h-3.5" />} {t('common.stop')}</button>
                   <div className="ml-auto text-[10px] font-mono text-muted-foreground/60">
                     $ envswitch {running ? 'stop' : 'start'} {svc.name}
                   </div>
