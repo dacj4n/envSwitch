@@ -123,23 +123,47 @@ impl PythonProvider {
         std::os::unix::fs::symlink(&brew_path, dest)
             .map_err(|e| format!("symlink {} -> {}: {}", brew_path, dest.display(), e))?;
 
-        // Homebrew python@X.Y is keg-only — python3 / python symlinks are
-        // not created by brew link. Add them so shims resolve correctly.
+        // Homebrew python@X.Y is keg-only — unversioned convenience symlinks
+        // (python3, pip3, etc.) are NOT created by brew link.
+        // Add them so shims can resolve unversioned commands.
         let brew_bin = std::path::PathBuf::from(&brew_path).join("bin");
-        let ver_bin = format!("python3.{}", version.split('.').nth(1).unwrap_or(""));
+        let minor = version.split('.').nth(1).unwrap_or("");
+        let ver_bin = format!("python3.{}", minor);
         if brew_bin.join(&ver_bin).exists() {
-            let py3 = brew_bin.join("python3");
-            if !py3.exists() {
-                std::os::unix::fs::symlink(&ver_bin, &py3).ok();
+            // python3 / python
+            ensure_symlink(&brew_bin, &ver_bin, "python3");
+            ensure_symlink(&brew_bin, "python3", "python");
+            // pip3 / pip
+            let ver_pip = format!("pip3.{}", minor);
+            if brew_bin.join(&ver_pip).exists() {
+                ensure_symlink(&brew_bin, &ver_pip, "pip3");
+                ensure_symlink(&brew_bin, "pip3", "pip");
             }
-            let py = brew_bin.join("python");
-            if !py.exists() {
-                std::os::unix::fs::symlink("python3", &py).ok();
-            }
+            // pydoc3
+            let ver_pydoc = format!("pydoc3.{}", minor);
+            ensure_symlink(&brew_bin, &ver_pydoc, "pydoc3");
+            // idle3
+            let ver_idle = format!("idle3.{}", minor);
+            ensure_symlink(&brew_bin, &ver_idle, "idle3");
+            // python3-config
+            let ver_cfg = format!("python3.{}-config", minor);
+            ensure_symlink(&brew_bin, &ver_cfg, "python3-config");
+            // wheel3
+            let ver_wheel = format!("wheel3.{}", minor);
+            ensure_symlink(&brew_bin, &ver_wheel, "wheel3");
         }
 
         eprintln!("Python {} linked from {}", actual, brew_path);
         Ok(actual)
+    }
+}
+
+/// Create a symlink `name` → `target` in `dir` if the target exists and
+/// the symlink doesn't already exist.
+fn ensure_symlink(dir: &std::path::Path, target: &str, name: &str) {
+    let link = dir.join(name);
+    if !link.exists() && dir.join(target).exists() {
+        std::os::unix::fs::symlink(target, &link).ok();
     }
 }
 
