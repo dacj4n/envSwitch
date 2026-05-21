@@ -24,7 +24,7 @@ export default function DoctorPage() {
       const items: CheckItem[] = [
         { label: t('doctor.platformDetected'), status: 'ok', detail: plat },
         { label: t('doctor.modulesLoaded'), status: 'ok', detail: `${(mods as any[]).length} ${t('doctor.countModules')}` },
-        { label: t('doctor.cliAvailable'), status: initStatus?.cli_available ? 'ok' : 'error', detail: initStatus?.cli_available ? initStatus.cli_path : t('doctor.cliNotFound') },
+        { label: t('doctor.cliAvailable'), status: initStatus?.cli_available ? 'ok' : 'warn', detail: initStatus?.cli_available ? initStatus.cli_path : t('doctor.cliOptional') },
         { label: t('doctor.shellInit'), status: initStatus?.shell_initialized ? 'ok' : 'error', detail: initStatus?.shell_initialized ? initStatus.init_shell : t('doctor.shellNotInit') },
         { label: t('doctor.shimsDir'), status: 'ok', detail: '~/.envswitch/shims/' },
         { label: t('doctor.brewAvailable'), status: mods ? 'ok' : 'warn', detail: mods ? t('doctor.brewFound') : t('doctor.brewNotFound') },
