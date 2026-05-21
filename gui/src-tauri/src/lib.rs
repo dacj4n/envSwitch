@@ -196,13 +196,11 @@ fn list_modules() -> Vec<ModuleInfo> {
 #[tauri::command]
 fn cover_module(module: String, version: String, global: bool) -> Result<String, String> {
     let status = shell::check_init_status();
-    if !status.cli_available {
-        return Err("envSwitch CLI not found. Please reinstall envSwitch.".into());
-    }
     if !status.shell_initialized {
         return Err(format!(
-            "Shell integration not initialized. Cover will have no effect.\n\
-             Run: envswitch init {}",
+            "Shell integration not initialized — cover has no effect.\n\
+             Use Doctor page to set up, or run in terminal:\n\
+             envswitch init {} && source ~/.envswitch/init.sh",
             if cfg!(target_os = "macos") {
                 "zsh"
             } else {
@@ -1521,6 +1519,70 @@ fn check_init_status() -> shell::InitStatus {
     shell::check_init_status()
 }
 
+#[tauri::command]
+fn init_shell() -> Result<String, String> {
+    let _ = envswitch::infra::fs::ensure_dirs();
+    let bin_path = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "envswitch".into());
+    let init_path = envswitch::infra::fs::envswitch_home().join("init.sh");
+    let init_block = envswitch::shell::render_init_block(&bin_path);
+    std::fs::write(&init_path, &init_block)
+        .map_err(|e| format!("Cannot write init.sh: {}", e))?;
+
+    // Detect shell and write to rc file
+    let home = dirs::home_dir().unwrap_or_default();
+    let (rc_path, _shell_name): (std::path::PathBuf, &str) =
+        if home.join(".zshrc").exists() || !home.join(".bashrc").exists() {
+            (home.join(".zshrc"), "zsh")
+        } else {
+            (home.join(".bashrc"), "bash")
+        };
+
+    let content = std::fs::read_to_string(&rc_path).unwrap_or_default();
+    if !envswitch::shell::has_init_block(&content) {
+        let clean = content.trim_end();
+        let new_content = format!("{}\n\n{}", clean, init_block);
+        std::fs::write(&rc_path, &new_content)
+            .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
+        Ok(format!(
+            "Shell integration added to {}. Run: source {}",
+            rc_path.display(),
+            init_path.display()
+        ))
+    } else {
+        Ok(format!(
+            "Shell integration already exists in {}",
+            rc_path.display()
+        ))
+    }
+}
+
+#[tauri::command]
+fn uninit_shell() -> Result<String, String> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let mut result = Vec::new();
+    for rc_name in &[".zshrc", ".bashrc"] {
+        let rc_path = home.join(rc_name);
+        if let Ok(content) = std::fs::read_to_string(&rc_path) {
+            if envswitch::shell::has_init_block(&content) {
+                let cleaned = envswitch::shell::remove_init_block(&content);
+                std::fs::write(&rc_path, &cleaned)
+                    .map_err(|e| format!("Cannot write {}: {}", rc_path.display(), e))?;
+                result.push(rc_path.display().to_string());
+            }
+        }
+    }
+    if result.is_empty() {
+        Ok("No shell integration found.".into())
+    } else {
+        Ok(format!(
+            "Removed shell integration from: {}. Open a new terminal or run:\n  unset -f envswitch 2>/dev/null; unset _ENVSWITCH_BIN _ENVSWITCH_HOME _ENVSWITCH_LOADED 2>/dev/null",
+            result.join(", ")
+        ))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1558,6 +1620,8 @@ pub fn run() {
             read_service_logs,
             get_operation_logs,
             check_init_status,
+            init_shell,
+            uninit_shell,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
