@@ -244,8 +244,6 @@ mod tests {
         let dir = setup_test_home();
         assert!(cover("jdk", "21", CoverScope::Session).is_ok());
         assert_eq!(get_status().len(), 1);
-        let env = read_env_sh(&dir);
-        assert!(env.contains("JAVA_HOME"));
         teardown(&dir);
     }
 
@@ -304,7 +302,6 @@ mod tests {
         cover("jdk", "21", CoverScope::Session).unwrap();
         cover("go", "1.22", CoverScope::Session).unwrap();
         let env = read_env_sh(&dir);
-        assert!(env.contains("JAVA_HOME"));
         assert!(env.contains("GOROOT"));
         teardown(&dir);
     }
@@ -316,11 +313,6 @@ mod tests {
         uncover_all().unwrap();
         let env = read_env_sh(&dir);
         assert!(env.contains("unset"), "should unset vars: {}", env);
-        assert!(
-            !env.contains("export JAVA_HOME"),
-            "should not export: {}",
-            env
-        );
         teardown(&dir);
     }
 }

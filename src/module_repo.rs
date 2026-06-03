@@ -8,7 +8,7 @@ pub fn builtin_modules() -> Vec<Module> {
             name: "jdk".into(),
             display_name: "OpenJDK (Temurin)".into(),
             category: ModuleCategory::Sdk,
-            env_vars: vec![("JAVA_HOME".into(), "{install_path}".into())],
+            env_vars: vec![],
             path_entries: vec!["bin".into(), "Contents/Home/bin".into()],
             default_port: None,
         },
@@ -110,9 +110,9 @@ mod tests {
     }
 
     #[test]
-    fn test_jdk_has_java_home() {
+    fn test_jdk_has_no_env_vars() {
         let jdk = find_module("jdk").unwrap();
-        assert!(jdk.env_vars.iter().any(|(k, _)| k == "JAVA_HOME"));
+        assert!(jdk.env_vars.is_empty());
     }
 
     #[test]

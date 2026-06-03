@@ -1243,6 +1243,12 @@ fn get_operation_logs(lines: usize) -> Vec<String> {
 }
 
 #[tauri::command]
+fn clear_operation_logs() -> Result<String, String> {
+    envswitch::infra::oplog::clear_ops();
+    Ok("ok".into())
+}
+
+#[tauri::command]
 fn get_proxy() -> Option<String> {
     envswitch::config::get_proxy()
 }
@@ -1619,6 +1625,7 @@ pub fn run() {
             list_installed_versions,
             read_service_logs,
             get_operation_logs,
+            clear_operation_logs,
             check_init_status,
             init_shell,
             uninit_shell,

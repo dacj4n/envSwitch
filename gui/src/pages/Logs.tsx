@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
 import { usePageActive } from '../lib/utils';
-import { ScrollTextIcon, InfoIcon, CheckCircle2Icon, AlertTriangleIcon, XCircleIcon, Loader2Icon } from 'lucide-react';
+import { ScrollTextIcon, InfoIcon, CheckCircle2Icon, AlertTriangleIcon, XCircleIcon, Loader2Icon, Trash2Icon } from 'lucide-react';
 
 const LEVEL_COLORS: Record<string, string> = {
   ALL: '#60a5fa', OK: '#22c55e', INFO: '#60a5fa', WARN: '#f59e0b', ERR: '#ef4444',
@@ -34,6 +34,16 @@ export default function LogsPage() {
     setLoading(false);
   }, []);
 
+  const clearLogs = async () => {
+    try {
+      await invoke('clear_operation_logs');
+      setLogs([]);
+      refresh();
+    } catch (e) {
+      alert('Clear failed: ' + String(e));
+    }
+  };
+
   useEffect(() => { refresh(); }, []);
   usePageActive('/logs', refresh);
 
@@ -51,6 +61,12 @@ export default function LogsPage() {
             <ScrollTextIcon className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">{t('logs.operationLog')}</span>
             <div className="flex items-center gap-1 ml-auto">
+              <button onClick={clearLogs}
+                className="px-3 py-1.5 rounded-md text-xs bg-secondary hover:bg-accent border border-border text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors"
+              >
+                <Trash2Icon className="w-3 h-3" />
+                {t('logs.clear')}
+              </button>
               <button onClick={refresh} disabled={loading}
                 className="px-3 py-1.5 rounded-md text-xs bg-secondary hover:bg-accent border border-border text-secondary-foreground flex items-center gap-1"
               >

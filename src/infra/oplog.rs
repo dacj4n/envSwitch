@@ -43,7 +43,7 @@ pub fn log_op(level: OpLevel, msg: &str) {
     }
 }
 
-/// Read the last `max_lines` from the operation log.
+/// Read the last `max_lines` from the operation log (newest first).
 #[allow(dead_code)]
 pub fn read_ops(max_lines: usize) -> Vec<String> {
     let path = envswitch_home().join("logs").join("operations.log");
@@ -53,5 +53,14 @@ pub fn read_ops(max_lines: usize) -> Vec<String> {
     let content = std::fs::read_to_string(&path).unwrap_or_default();
     let all: Vec<&str> = content.lines().collect();
     let start = all.len().saturating_sub(max_lines);
-    all[start..].iter().map(|s| s.to_string()).collect()
+    let mut lines: Vec<String> = all[start..].iter().map(|s| s.to_string()).collect();
+    lines.reverse();
+    lines
+}
+
+/// Clear the operation log.
+#[allow(dead_code)]
+pub fn clear_ops() {
+    let path = envswitch_home().join("logs").join("operations.log");
+    let _ = std::fs::write(&path, "");
 }
